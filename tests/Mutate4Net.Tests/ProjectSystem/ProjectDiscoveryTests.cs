@@ -115,6 +115,48 @@ public sealed class ProjectDiscoveryTests
     }
 
     [Fact]
+    public void Discover_UsesExplicitProjectWhenMultipleProjectsIncludeSource()
+    {
+        using var workspace = ProjectWorkspace.Create();
+        string project = workspace.Write("src/App/App.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        workspace.Write("src/App/AlsoApp.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        string source = workspace.Write("src/App/Calculator.cs", "class Calculator { }");
+
+        ProjectInfo? info = new ProjectDiscovery().Discover(source, project);
+
+        Assert.NotNull(info);
+        Assert.Equal(project, info.ProjectFile);
+    }
+
+    [Fact]
+    public void Discover_RejectsExplicitProjectThatDoesNotIncludeSource()
+    {
+        using var workspace = ProjectWorkspace.Create();
+        string project = workspace.Write("src/App/App.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net8.0</TargetFramework>
+                <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+              </PropertyGroup>
+            </Project>
+            """);
+        string source = workspace.Write("src/App/Calculator.cs", "class Calculator { }");
+
+        InvalidOperationException ex = Assert.Throws<InvalidOperationException>(
+            () => new ProjectDiscovery().Discover(source, project));
+
+        Assert.Contains("does not include", ex.Message);
+    }
+
+    [Fact]
     public void TestCommandFactory_UsesDiscoveredProjectPath()
     {
         using var workspace = ProjectWorkspace.Create();
@@ -147,6 +189,33 @@ public sealed class ProjectDiscoveryTests
 
         Assert.Equal(workspace.Path(""), command.WorkingDirectory);
         Assert.Equal(["dotnet", "test", solution], command.Command);
+    }
+
+    [Fact]
+    public void TestCommandFactory_UsesExplicitProjectForOwnership()
+    {
+        using var workspace = ProjectWorkspace.Create();
+        string project = workspace.Write("src/App/App.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        workspace.Write("src/App/AlsoApp.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        string source = workspace.Write("src/App/Calculator.cs", "class Calculator { }");
+
+        TestCommand command = new TestCommandFactory().Create(
+            source,
+            projectFile: project,
+            customCommand: null,
+            testProjects: [],
+            excludedTestProjects: []);
+
+        Assert.Equal(workspace.Path("src/App"), command.WorkingDirectory);
+        Assert.Equal(["dotnet", "test", project], command.Command);
     }
 
     [Fact]

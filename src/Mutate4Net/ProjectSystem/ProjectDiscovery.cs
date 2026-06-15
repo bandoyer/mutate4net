@@ -26,9 +26,14 @@ public sealed class ProjectDiscovery
         ".mutate4net"
     };
 
-    public ProjectInfo? Discover(string sourceFile)
+    public ProjectInfo? Discover(string sourceFile, string? projectFile = null)
     {
         string fullSource = Path.GetFullPath(sourceFile);
+        if (!string.IsNullOrWhiteSpace(projectFile))
+        {
+            return DiscoverExplicitProject(fullSource, projectFile);
+        }
+
         ProjectInfo[] matches = CandidateProjects(fullSource)
             .Where(project => IncludesSource(project.ProjectFile, fullSource))
             .ToArray();
@@ -51,6 +56,33 @@ public sealed class ProjectDiscovery
         }
 
         return match;
+    }
+
+    private ProjectInfo DiscoverExplicitProject(string fullSource, string projectFile)
+    {
+        string fullProject = Path.GetFullPath(projectFile);
+        if (!File.Exists(fullProject))
+        {
+            throw new FileNotFoundException($"Project file does not exist: {fullProject}");
+        }
+
+        if (!IncludesSource(fullProject, fullSource))
+        {
+            throw new InvalidOperationException($"{fullProject} does not include {fullSource}.");
+        }
+
+        bool isTestProject = IsTestProject(fullProject);
+        if (isTestProject)
+        {
+            throw new InvalidOperationException($"Mutation targets in test projects are not supported: {fullProject}");
+        }
+
+        string projectDirectory = Path.GetDirectoryName(fullProject)!;
+        return new ProjectInfo(
+            fullProject,
+            projectDirectory,
+            isTestProject,
+            FindNearestSolution(new DirectoryInfo(projectDirectory)));
     }
 
     public IReadOnlyList<string> DiscoverTestProjects(string moduleRoot)

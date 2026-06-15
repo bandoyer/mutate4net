@@ -78,6 +78,35 @@ public sealed class CliArgumentsParserTests
     }
 
     [Fact]
+    public void Parse_ReadsExplicitProject()
+    {
+        using var sample = SampleFile.Create("class Sample { }");
+        string project = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(sample.Path)!, "Sample.csproj");
+        File.WriteAllText(project, """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+
+        ParseOutcome outcome = new CliArgumentsParser().Parse([sample.Path, "--project", project]);
+
+        Assert.True(outcome.IsSuccess);
+        Assert.NotNull(outcome.Arguments);
+        Assert.Equal(System.IO.Path.GetFullPath(project), outcome.Arguments.ProjectFile);
+    }
+
+    [Fact]
+    public void Parse_RejectsMissingExplicitProject()
+    {
+        using var sample = SampleFile.Create("class Sample { }");
+
+        ParseOutcome outcome = new CliArgumentsParser().Parse([sample.Path, "--project", "missing.csproj"]);
+
+        Assert.False(outcome.IsSuccess);
+        Assert.Contains("Project file does not exist", outcome.ErrorMessage);
+    }
+
+    [Fact]
     public void Parse_RejectsTestCommandWithTestProjectSelection()
     {
         using var sample = SampleFile.Create("class Sample { }");

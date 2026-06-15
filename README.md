@@ -82,6 +82,12 @@ Limit parallel workers:
 mutate4net path/to/File.cs --max-workers 4
 ```
 
+Choose the owning production project when a source file is included by more than one `.csproj`:
+
+```powershell
+mutate4net path/to/File.cs --project src/App/App.csproj
+```
+
 Use a custom test command. Custom commands currently treat all mutation sites as covered:
 
 ```powershell

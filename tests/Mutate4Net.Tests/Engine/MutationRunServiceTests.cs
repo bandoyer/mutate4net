@@ -360,6 +360,7 @@ public sealed class MutationRunServiceTests
             MutationWarning: 50,
             MaxWorkers: maxWorkers,
             TimeoutFactor: 10,
+            ProjectFile: null,
             TestCommand: testCommand,
             Verbose: false,
             TestProjects: [],

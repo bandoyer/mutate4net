@@ -20,13 +20,14 @@ public sealed class TestCommandFactory
     public TestCommand Create(CliArguments arguments) =>
         Create(
             arguments.TargetFile,
+            arguments.ProjectFile,
             arguments.TestCommand,
             arguments.TestProjects,
             arguments.ExcludedTestProjects);
 
     public TestCommand Create(string sourceFile, string? customCommand)
     {
-        return Create(sourceFile, customCommand, [], []);
+        return Create(sourceFile, projectFile: null, customCommand, [], []);
     }
 
     public TestCommand Create(
@@ -35,7 +36,17 @@ public sealed class TestCommandFactory
         IReadOnlyList<string> testProjects,
         IReadOnlyList<string> excludedTestProjects)
     {
-        ProjectInfo? project = _projectDiscovery.Discover(sourceFile);
+        return Create(sourceFile, projectFile: null, customCommand, testProjects, excludedTestProjects);
+    }
+
+    public TestCommand Create(
+        string sourceFile,
+        string? projectFile,
+        string? customCommand,
+        IReadOnlyList<string> testProjects,
+        IReadOnlyList<string> excludedTestProjects)
+    {
+        ProjectInfo? project = _projectDiscovery.Discover(sourceFile, projectFile);
         string workingDirectory = project is null
             ? Path.GetDirectoryName(sourceFile)!
             : WorkingDirectory(project);
@@ -68,6 +79,7 @@ public sealed class TestCommandFactory
     {
         TestCommand baseline = Create(
             arguments.TargetFile,
+            arguments.ProjectFile,
             customCommand: null,
             arguments.TestProjects,
             arguments.ExcludedTestProjects);
@@ -89,6 +101,7 @@ public sealed class TestCommandFactory
     {
         TestCommand baseline = Create(
             arguments.TargetFile,
+            arguments.ProjectFile,
             customCommand: null,
             arguments.TestProjects,
             arguments.ExcludedTestProjects);

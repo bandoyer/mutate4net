@@ -20,6 +20,7 @@ public sealed class CliArgumentsParser
         int mutationWarning = 50;
         int maxWorkers = Math.Max(1, Environment.ProcessorCount / 2);
         int timeoutFactor = 10;
+        string? projectFile = null;
         string? testCommand = null;
         var testProjects = new List<string>();
         var excludedTestProjects = new List<string>();
@@ -82,6 +83,18 @@ public sealed class CliArgumentsParser
                     if (!TryReadPositiveInteger(args, ref i, arg, out timeoutFactor, out ParseOutcome? timeoutError))
                     {
                         return timeoutError!;
+                    }
+
+                    break;
+                case "--project":
+                    if (!TryReadValue(args, ref i, arg, out projectFile, out ParseOutcome? projectError))
+                    {
+                        return projectError!;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(projectFile))
+                    {
+                        return ParseOutcome.Error("--project requires a non-empty value.");
                     }
 
                     break;
@@ -155,6 +168,20 @@ public sealed class CliArgumentsParser
             return ParseOutcome.Error($"Target file does not exist: {target}");
         }
 
+        if (projectFile is not null)
+        {
+            projectFile = Path.GetFullPath(projectFile);
+            if (!File.Exists(projectFile))
+            {
+                return ParseOutcome.Error($"Project file does not exist: {projectFile}");
+            }
+
+            if (!string.Equals(Path.GetExtension(projectFile), ".csproj", StringComparison.OrdinalIgnoreCase))
+            {
+                return ParseOutcome.Error("--project must reference a .csproj file.");
+            }
+        }
+
         string? conflict = FindConflict(
             scan,
             updateManifest,
@@ -181,6 +208,7 @@ public sealed class CliArgumentsParser
             mutationWarning,
             maxWorkers,
             timeoutFactor,
+            projectFile,
             testCommand,
             verbose,
             testProjects,

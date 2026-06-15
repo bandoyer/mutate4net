@@ -10,6 +10,7 @@ public sealed record CliArguments(
     int MutationWarning,
     int MaxWorkers,
     int TimeoutFactor,
+    string? ProjectFile,
     string? TestCommand,
     bool Verbose,
     IReadOnlyList<string> TestProjects,

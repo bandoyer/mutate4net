@@ -196,6 +196,7 @@ public sealed class CoverageRunnerTests
             MutationWarning: 50,
             MaxWorkers: 1,
             TimeoutFactor: 10,
+            ProjectFile: null,
             TestCommand: testCommand,
             Verbose: false,
             TestProjects: testProjects ?? [],
