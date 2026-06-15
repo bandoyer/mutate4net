@@ -15,6 +15,7 @@ public sealed class MutationRunService
     private readonly ManifestSupport _manifestSupport;
     private readonly ICommandExecutor _executor;
     private readonly TestCommandFactory _testCommandFactory;
+    private readonly WorkerWorkspaceManager _workspaceManager;
     private readonly ReportFormatter _reportFormatter;
     private readonly DifferentialSelector _selector;
     private readonly LineFilter _lineFilter;
@@ -29,6 +30,7 @@ public sealed class MutationRunService
             new ProcessCommandExecutor(),
             new TestCommandFactory(),
             new ReportFormatter(),
+            new WorkerWorkspaceManager(),
             null,
             new LineFilter(),
             null,
@@ -43,6 +45,7 @@ public sealed class MutationRunService
         ICommandExecutor executor,
         TestCommandFactory testCommandFactory,
         ReportFormatter reportFormatter,
+        WorkerWorkspaceManager? workspaceManager = null,
         DifferentialSelector? selector = null,
         LineFilter? lineFilter = null,
         CoverageRunner? coverageRunner = null,
@@ -53,6 +56,7 @@ public sealed class MutationRunService
         _manifestSupport = manifestSupport;
         _executor = executor;
         _testCommandFactory = testCommandFactory;
+        _workspaceManager = workspaceManager ?? new WorkerWorkspaceManager();
         _reportFormatter = reportFormatter;
         _selector = selector ?? new DifferentialSelector(manifestSupport);
         _lineFilter = lineFilter ?? new LineFilter();
@@ -81,6 +85,7 @@ public sealed class MutationRunService
         CoverageSelection coverageSelection = _coverageFilter.Filter(command.WorkingDirectory, selectedSites, coverageRun.Report);
         IReadOnlyList<MutationResult> results = await RunMutantsAsync(
             arguments.TargetFile,
+            command.WorkingDirectory,
             analysis.Source,
             coverageSelection.Covered,
             command,
@@ -110,22 +115,28 @@ public sealed class MutationRunService
 
     private async Task<IReadOnlyList<MutationResult>> RunMutantsAsync(
         string sourceFile,
+        string moduleRoot,
         string originalSource,
         IReadOnlyList<MutationSite> sites,
         TestCommand command,
         long timeoutMillis)
     {
         var results = new List<MutationResult>();
-        string originalFileContents = await File.ReadAllTextAsync(sourceFile);
+        if (sites.Count == 0)
+        {
+            return results;
+        }
 
+        WorkerWorkspace workspace = _workspaceManager.Create(moduleRoot, sourceFile);
         try
         {
+            TestCommand workerCommand = _testCommandFactory.Create(workspace.SourceFile, command.IsCustom ? command.DisplayCommand : null);
             for (int i = 0; i < sites.Count; i++)
             {
                 MutationSite site = sites[i];
                 string mutated = originalSource[..site.Start] + site.Replacement + originalSource[site.End..];
-                await File.WriteAllTextAsync(sourceFile, mutated);
-                CommandResult result = await _executor.RunAsync(command.Command, command.WorkingDirectory, timeoutMillis);
+                await File.WriteAllTextAsync(workspace.SourceFile, mutated);
+                CommandResult result = await _executor.RunAsync(workerCommand.Command, workerCommand.WorkingDirectory, timeoutMillis);
                 results.Add(new MutationResult(
                     site,
                     result.ExitCode != 0 || result.TimedOut,
@@ -133,12 +144,12 @@ public sealed class MutationRunService
                     result.TimedOut,
                     i + 1,
                     sites.Count));
-                await File.WriteAllTextAsync(sourceFile, originalFileContents);
+                await File.WriteAllTextAsync(workspace.SourceFile, originalSource);
             }
         }
         finally
         {
-            await File.WriteAllTextAsync(sourceFile, originalFileContents);
+            _workspaceManager.Delete(workspace);
         }
 
         return results;

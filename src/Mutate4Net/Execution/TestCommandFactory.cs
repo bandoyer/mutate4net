@@ -7,7 +7,7 @@ public sealed class TestCommandFactory
         string workingDirectory = FindProjectDirectory(sourceFile);
         if (!string.IsNullOrWhiteSpace(customCommand))
         {
-            return new TestCommand(ShellCommand(customCommand), workingDirectory);
+            return new TestCommand(ShellCommand(customCommand), workingDirectory, IsCustom: true, DisplayCommand: customCommand);
         }
 
         string? project = FindNearestProject(sourceFile);
