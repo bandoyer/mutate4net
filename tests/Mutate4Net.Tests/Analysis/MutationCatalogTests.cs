@@ -155,6 +155,95 @@ public sealed class MutationCatalogTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_DiscoversSupportedStringMethodMutators()
+    {
+        const string source = """
+            using System.Globalization;
+            using static System.String;
+
+            class Sample
+            {
+                bool Blank(string value)
+                {
+                    return string.IsNullOrEmpty(value) || IsNullOrWhiteSpace(value);
+                }
+
+                string Normalize(string value, CultureInfo culture)
+                {
+                    return value.ToLower().ToUpperInvariant() + value.ToUpper(culture);
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "string",
+            MutatorId: "string-method",
+            Original: "IsNullOrEmpty",
+            Replacement: "IsNullOrWhiteSpace"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "string",
+            MutatorId: "string-method",
+            Original: "IsNullOrWhiteSpace",
+            Replacement: "IsNullOrEmpty"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "string",
+            MutatorId: "string-method",
+            Original: "ToLower",
+            Replacement: "ToUpper"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "string",
+            MutatorId: "string-method",
+            Original: "ToUpperInvariant",
+            Replacement: "ToLowerInvariant"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "string",
+            MutatorId: "string-method",
+            Original: "ToUpper",
+            Replacement: "ToLower"
+        });
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_DoesNotTreatCustomMethodsAsStringMutators()
+    {
+        const string source = """
+            class Sample
+            {
+                bool Check(string value)
+                {
+                    return IsNullOrEmpty(value);
+                }
+
+                bool IsNullOrEmpty(string value)
+                {
+                    return value.Length == 0;
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.DoesNotContain(analysis.Sites, site => site is
+        {
+            Category: "string",
+            MutatorId: "string-method"
+        });
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_DiscoversConditionalExpressionBranches()
     {
         const string source = """

@@ -185,6 +185,7 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
     public override void VisitInvocationExpression(InvocationExpressionSyntax node)
     {
         AddLinqMethodReplacement(node);
+        AddStringMethodReplacement(node);
         base.VisitInvocationExpression(node);
     }
 
@@ -239,12 +240,7 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
 
     private void AddLinqMethodReplacement(InvocationExpressionSyntax node)
     {
-        SimpleNameSyntax? name = node.Expression switch
-        {
-            MemberAccessExpressionSyntax memberAccess => memberAccess.Name,
-            MemberBindingExpressionSyntax memberBinding => memberBinding.Name,
-            _ => null
-        };
+        SimpleNameSyntax? name = InvocationName(node);
         if (name is null)
         {
             return;
@@ -265,6 +261,31 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
             $"replace {name.Identifier.ValueText} with {replacement}",
             "linq-method",
             "linq");
+    }
+
+    private void AddStringMethodReplacement(InvocationExpressionSyntax node)
+    {
+        SimpleNameSyntax? name = InvocationName(node);
+        if (name is null)
+        {
+            return;
+        }
+
+        if (_semanticModel.GetSymbolInfo(node).Symbol is not IMethodSymbol method ||
+            !IsSystemStringMethod(method) ||
+            StringMethodReplacementFor(method) is not { } replacement)
+        {
+            return;
+        }
+
+        AddSite(
+            node,
+            name.Identifier.Span,
+            name.Identifier.ValueText,
+            replacement,
+            $"replace {name.Identifier.ValueText} with {replacement}",
+            "string-method",
+            "string");
     }
 
     private void AddNullReplacement(ExpressionSyntax? expression)
@@ -552,6 +573,33 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
                containingType.ContainingNamespace.ToDisplayString() == "System.Linq" &&
                containingType.Name is "Enumerable" or "Queryable";
     }
+
+    private static bool IsSystemStringMethod(IMethodSymbol method) =>
+        method.ContainingType?.SpecialType == SpecialType.System_String;
+
+    private static SimpleNameSyntax? InvocationName(InvocationExpressionSyntax node) => node.Expression switch
+    {
+        SimpleNameSyntax simpleName => simpleName,
+        MemberAccessExpressionSyntax memberAccess => memberAccess.Name,
+        MemberBindingExpressionSyntax memberBinding => memberBinding.Name,
+        _ => null
+    };
+
+    private static string? StringMethodReplacementFor(IMethodSymbol method) => method.Name switch
+    {
+        "IsNullOrEmpty" when IsStaticStringPredicate(method) => "IsNullOrWhiteSpace",
+        "IsNullOrWhiteSpace" when IsStaticStringPredicate(method) => "IsNullOrEmpty",
+        "ToLower" => "ToUpper",
+        "ToUpper" => "ToLower",
+        "ToLowerInvariant" when method.Parameters.Length == 0 => "ToUpperInvariant",
+        "ToUpperInvariant" when method.Parameters.Length == 0 => "ToLowerInvariant",
+        _ => null
+    };
+
+    private static bool IsStaticStringPredicate(IMethodSymbol method) =>
+        method.IsStatic &&
+        method.Parameters.Length == 1 &&
+        method.Parameters[0].Type.SpecialType == SpecialType.System_String;
 
     private static bool IsNumericValue(object? value, decimal expected)
     {
