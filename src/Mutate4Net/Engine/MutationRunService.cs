@@ -4,6 +4,7 @@ using Mutate4Net.Execution;
 using Mutate4Net.Manifest;
 using Mutate4Net.Model;
 using Mutate4Net.Reporting;
+using Mutate4Net.Selection;
 
 namespace Mutate4Net.Engine;
 
@@ -14,6 +15,9 @@ public sealed class MutationRunService
     private readonly ICommandExecutor _executor;
     private readonly TestCommandFactory _testCommandFactory;
     private readonly ReportFormatter _reportFormatter;
+    private readonly DifferentialSelector _selector;
+    private readonly LineFilter _lineFilter;
+    private readonly ExecutionMessages _messages;
 
     public MutationRunService()
         : this(
@@ -21,7 +25,10 @@ public sealed class MutationRunService
             new ManifestSupport(),
             new ProcessCommandExecutor(),
             new TestCommandFactory(),
-            new ReportFormatter())
+            new ReportFormatter(),
+            null,
+            new LineFilter(),
+            new ExecutionMessages())
     {
     }
 
@@ -30,19 +37,26 @@ public sealed class MutationRunService
         ManifestSupport manifestSupport,
         ICommandExecutor executor,
         TestCommandFactory testCommandFactory,
-        ReportFormatter reportFormatter)
+        ReportFormatter reportFormatter,
+        DifferentialSelector? selector = null,
+        LineFilter? lineFilter = null,
+        ExecutionMessages? messages = null)
     {
         _catalog = catalog;
         _manifestSupport = manifestSupport;
         _executor = executor;
         _testCommandFactory = testCommandFactory;
         _reportFormatter = reportFormatter;
+        _selector = selector ?? new DifferentialSelector(manifestSupport);
+        _lineFilter = lineFilter ?? new LineFilter();
+        _messages = messages ?? new ExecutionMessages();
     }
 
     public async Task<MutationRunOutcome> RunAsync(CliArguments arguments)
     {
         SourceAnalysis analysis = await _catalog.AnalyzeAsync(arguments.TargetFile);
-        IReadOnlyList<MutationSite> selectedSites = SelectSites(analysis.Sites, arguments.Lines);
+        DifferentialSelection differentialSelection = await _selector.SelectAsync(arguments.TargetFile, arguments, analysis);
+        IReadOnlyList<MutationSite> selectedSites = _lineFilter.Filter(differentialSelection.Selected, arguments.Lines);
         TestCommand command = _testCommandFactory.Create(arguments.TargetFile, arguments.TestCommand);
         CommandResult baselineResult = await _executor.RunAsync(command.Command, command.WorkingDirectory, 0);
         var baseline = new TestRun(
@@ -78,7 +92,7 @@ public sealed class MutationRunService
         string report = _reportFormatter.Format(
             command.WorkingDirectory,
             baseline,
-            string.Empty,
+            _messages.ExtraText(arguments, differentialSelection, selectedSites.Count),
             [],
             results);
         return new MutationRunOutcome(survived ? 3 : 0, report, string.Empty);
@@ -120,22 +134,6 @@ public sealed class MutationRunService
         return results;
     }
 
-    private static IReadOnlyList<MutationSite> SelectSites(
-        IReadOnlyList<MutationSite> sites,
-        IReadOnlySet<int> lines)
-    {
-        if (lines.Count == 0)
-        {
-            return sites.OrderBy(site => site.Start).ToArray();
-        }
-
-        return sites
-            .Where(site => lines.Contains(site.Line))
-            .OrderBy(site => site.Start)
-            .ToArray();
-    }
-
     private static long TimeoutMillis(long baselineDurationMillis, int timeoutFactor) =>
         Math.Max(1_000, baselineDurationMillis * timeoutFactor);
 }
-
