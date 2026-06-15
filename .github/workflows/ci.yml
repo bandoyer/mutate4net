@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test-pack:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore mutate4net.sln
+
+      - name: Test
+        run: dotnet test mutate4net.sln --configuration Release --no-restore
+
+      - name: Pack
+        run: dotnet pack src/Mutate4Net/Mutate4Net.csproj --configuration Release --no-restore -o artifacts/packages
+

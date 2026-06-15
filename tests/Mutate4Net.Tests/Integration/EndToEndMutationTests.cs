@@ -59,8 +59,8 @@ public sealed class EndToEndMutationTests
             }
             """);
 
-        await workspace.DotnetAsync("new", "sln", "-n", "Sample", "--format", "sln");
-        await workspace.DotnetAsync("sln", "Sample.sln", "add", libraryProject, testProject);
+        await workspace.DotnetAsync("new", "sln", "-n", "Sample");
+        await workspace.DotnetAsync("sln", workspace.SolutionFileName("Sample"), "add", libraryProject, testProject);
         using var output = new StringWriter();
         using var error = new StringWriter();
 
@@ -137,6 +137,21 @@ public sealed class EndToEndMutationTests
             }
         }
 
+        public string SolutionFileName(string name)
+        {
+            if (File.Exists(Path.Combine(_root, name + ".sln")))
+            {
+                return name + ".sln";
+            }
+
+            if (File.Exists(Path.Combine(_root, name + ".slnx")))
+            {
+                return name + ".slnx";
+            }
+
+            throw new FileNotFoundException($"Could not find solution {name}.sln or {name}.slnx in {_root}.");
+        }
+
         public void Dispose()
         {
             try
@@ -152,4 +167,3 @@ public sealed class EndToEndMutationTests
         }
     }
 }
-
