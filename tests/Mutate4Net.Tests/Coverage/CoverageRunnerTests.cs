@@ -181,15 +181,53 @@ public sealed class CoverageRunnerTests
         Assert.True(run.Report.Covers("Sample.cs", 3));
     }
 
+    [Fact]
+    public async Task RunBaselineAsync_ReusesExistingCoverageReports()
+    {
+        using var sample = SampleFile.Create("""
+            class Sample
+            {
+                bool Flag() => true;
+                bool Other() => false;
+            }
+            """);
+        var factory = new TestCommandFactory();
+        TestCommand baseline = factory.Create(sample.Path, customCommand: null);
+        string coverageDirectory = CoverageLoader.DefaultCoverageDirectory(baseline.WorkingDirectory);
+        Directory.CreateDirectory(coverageDirectory);
+        File.WriteAllText(Path.Combine(coverageDirectory, "coverage-1.cobertura.xml"), CoverageXml(3));
+        string collectorDirectory = Path.Combine(coverageDirectory, Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(collectorDirectory);
+        File.WriteAllText(Path.Combine(collectorDirectory, "coverage.cobertura.xml"), CoverageXml(4));
+        var executor = new FakeCommandExecutor((command, _) =>
+        {
+            Assert.DoesNotContain("/p:CollectCoverage=true", command);
+            Assert.DoesNotContain("--collect", command);
+            return new CommandResult(0, "baseline ok", 15, false);
+        });
+        var runner = new CoverageRunner(executor, factory, new CoverageLoader());
+
+        CoverageRun run = await runner.RunBaselineAsync(
+            Arguments(sample.Path, testCommand: null, reuseCoverage: true),
+            baseline);
+
+        Assert.True(run.Baseline.Passed);
+        Assert.True(run.ReusedCoverage);
+        Assert.True(run.ReportAvailable);
+        Assert.True(run.Report.Covers("Sample.cs", 3));
+        Assert.True(run.Report.Covers("Sample.cs", 4));
+    }
+
     private static CliArguments Arguments(
         string path,
         string? testCommand,
+        bool reuseCoverage = false,
         IReadOnlyList<string>? testProjects = null,
         IReadOnlyList<string>? excludedTestProjects = null) =>
         new(
             path,
             CliMode.Mutate,
-            ReuseCoverage: false,
+            ReuseCoverage: reuseCoverage,
             Lines: new HashSet<int>(),
             SinceLastRun: false,
             MutateAll: false,
@@ -213,6 +251,23 @@ public sealed class CoverageRunnerTests
             <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
           </ItemGroup>
         </Project>
+        """;
+
+    private static string CoverageXml(int coveredLine) =>
+        $$"""
+        <coverage>
+          <packages>
+            <package name="">
+              <classes>
+                <class name="Sample" filename="Sample.cs">
+                  <lines>
+                    <line number="{{coveredLine}}" hits="1" />
+                  </lines>
+                </class>
+              </classes>
+            </package>
+          </packages>
+        </coverage>
         """;
 
     private sealed class FakeCommandExecutor : ICommandExecutor

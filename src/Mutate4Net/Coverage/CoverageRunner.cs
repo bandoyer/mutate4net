@@ -28,9 +28,9 @@ public sealed class CoverageRunner
         if (arguments.ReuseCoverage)
         {
             CommandResult baselineResult = await TestCommandRunner.RunAsync(_executor, baselineCommand, 0);
-            string reusedPath = CoverageLoader.DefaultCoveragePath(baselineCommand.WorkingDirectory);
-            bool reportAvailable = File.Exists(reusedPath);
-            CoverageReport report = _coverageLoader.LoadPathOrAllCovered(reusedPath);
+            string[] reusedPaths = ExistingCoveragePaths(baselineCommand.WorkingDirectory);
+            bool reportAvailable = reusedPaths.Length > 0;
+            CoverageReport report = _coverageLoader.LoadPathsOrAllCovered(reusedPaths);
             return new CoverageRun(ToTestRun(baselineResult), report, ReusedCoverage: true, reportAvailable);
         }
 
@@ -71,6 +71,19 @@ public sealed class CoverageRunner
         Directory.Exists(coverageDirectory)
             ? Directory.EnumerateFiles(coverageDirectory, "coverage.cobertura.xml", SearchOption.AllDirectories).ToArray()
             : [];
+
+    private static string[] ExistingCoveragePaths(string workingDirectory)
+    {
+        string coverageDirectory = CoverageLoader.DefaultCoverageDirectory(workingDirectory);
+        if (!Directory.Exists(coverageDirectory))
+        {
+            return [];
+        }
+
+        return Directory.EnumerateFiles(coverageDirectory, "*.cobertura.xml", SearchOption.AllDirectories)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
 
     private static void ClearCoverageDirectory(string coverageDirectory)
     {
