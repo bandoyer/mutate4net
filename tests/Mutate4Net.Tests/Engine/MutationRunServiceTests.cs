@@ -90,6 +90,37 @@ public sealed class MutationRunServiceTests
             outcome.Output.IndexOf("replace false with true", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task RunAsync_ReusesWorkerWorkspaceForSequentialMutants()
+    {
+        using var sample = SampleFile.Create("""
+            class Sample
+            {
+                bool First() => true;
+                bool Second() => false;
+            }
+            """);
+        var mutantWorkingDirectories = new List<string>();
+        var executor = new FakeCommandExecutor(
+            (runCount, _, workingDirectory) =>
+            {
+                if (runCount > 1)
+                {
+                    mutantWorkingDirectories.Add(workingDirectory);
+                }
+            },
+            new CommandResult(0, "baseline ok", 10, false),
+            new CommandResult(1, "first mutant failed", 11, false),
+            new CommandResult(1, "second mutant failed", 12, false));
+        var service = CreateService(executor);
+
+        MutationRunOutcome outcome = await service.RunAsync(Arguments(sample.Path, maxWorkers: 1));
+
+        Assert.Equal(0, outcome.ExitCode);
+        Assert.Equal(2, mutantWorkingDirectories.Count);
+        Assert.Single(mutantWorkingDirectories.Distinct(StringComparer.OrdinalIgnoreCase));
+    }
+
 
     [Fact]
     public async Task RunAsync_ReturnsSurvivedAndRestoresOriginal_WhenMutantSurvives()

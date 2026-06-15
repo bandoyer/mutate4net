@@ -15,14 +15,26 @@ public sealed class WorkerWorkspaceManager
 
     public WorkerWorkspace Create(string moduleRoot, string sourceFile)
     {
-        string runRoot = Path.Combine(moduleRoot, ".mutate4net", "workers", "run-" + Guid.NewGuid().ToString("N"));
-        string workerRoot = Path.Combine(runRoot, "worker-1");
-        Directory.CreateDirectory(workerRoot);
-        CopyDirectory(moduleRoot, workerRoot);
+        return CreatePool(moduleRoot, sourceFile, workerCount: 1)[0];
+    }
 
+    public IReadOnlyList<WorkerWorkspace> CreatePool(string moduleRoot, string sourceFile, int workerCount)
+    {
+        string runRoot = Path.Combine(moduleRoot, ".mutate4net", "workers", "run-" + Guid.NewGuid().ToString("N"));
         string relativeSource = Path.GetRelativePath(moduleRoot, sourceFile);
-        string workerSource = Path.GetFullPath(Path.Combine(workerRoot, relativeSource));
-        return new WorkerWorkspace(runRoot, workerRoot, workerSource);
+        var workers = new List<WorkerWorkspace>(workerCount);
+
+        for (int i = 1; i <= workerCount; i++)
+        {
+            string workerRoot = Path.Combine(runRoot, "worker-" + i);
+            Directory.CreateDirectory(workerRoot);
+            CopyDirectory(moduleRoot, workerRoot);
+
+            string workerSource = Path.GetFullPath(Path.Combine(workerRoot, relativeSource));
+            workers.Add(new WorkerWorkspace(runRoot, workerRoot, workerSource));
+        }
+
+        return workers;
     }
 
     public void Delete(WorkerWorkspace workspace)
@@ -55,4 +67,3 @@ public sealed class WorkerWorkspaceManager
         }
     }
 }
-

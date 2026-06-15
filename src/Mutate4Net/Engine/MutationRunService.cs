@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Mutate4Net.Analysis;
 using Mutate4Net.Cli;
 using Mutate4Net.Coverage;
@@ -130,37 +131,49 @@ public sealed class MutationRunService
         }
 
         int workerCount = Math.Max(1, Math.Min(maxWorkers, sites.Count));
+        IReadOnlyList<WorkerWorkspace> workerPool = _workspaceManager.CreatePool(moduleRoot, sourceFile, workerCount);
+        var availableWorkers = new ConcurrentQueue<WorkerWorkspace>(workerPool);
         using var throttle = new SemaphoreSlim(workerCount, workerCount);
-        Task<MutationResult>[] tasks = sites
-            .Select((site, index) => RunMutantAsync(
-                sourceFile,
-                moduleRoot,
-                originalSource,
-                site,
-                command,
-                timeoutMillis,
-                index + 1,
-                sites.Count,
-                throttle))
-            .ToArray();
+        try
+        {
+            Task<MutationResult>[] tasks = sites
+                .Select((site, index) => RunMutantAsync(
+                    originalSource,
+                    site,
+                    command,
+                    timeoutMillis,
+                    index + 1,
+                    sites.Count,
+                    throttle,
+                    availableWorkers))
+                .ToArray();
 
-        MutationResult[] results = await Task.WhenAll(tasks);
-        return results.OrderBy(result => result.Order).ToArray();
+            MutationResult[] results = await Task.WhenAll(tasks);
+            return results.OrderBy(result => result.Order).ToArray();
+        }
+        finally
+        {
+            _workspaceManager.Delete(workerPool[0]);
+        }
     }
 
     private async Task<MutationResult> RunMutantAsync(
-        string sourceFile,
-        string moduleRoot,
         string originalSource,
         MutationSite site,
         TestCommand command,
         long timeoutMillis,
         int order,
         int totalJobs,
-        SemaphoreSlim throttle)
+        SemaphoreSlim throttle,
+        ConcurrentQueue<WorkerWorkspace> availableWorkers)
     {
         await throttle.WaitAsync();
-        WorkerWorkspace workspace = _workspaceManager.Create(moduleRoot, sourceFile);
+        if (!availableWorkers.TryDequeue(out WorkerWorkspace? workspace))
+        {
+            throttle.Release();
+            throw new InvalidOperationException("No worker workspace was available.");
+        }
+
         try
         {
             TestCommand workerCommand = _testCommandFactory.Create(workspace.SourceFile, command.IsCustom ? command.DisplayCommand : null);
@@ -177,8 +190,15 @@ public sealed class MutationRunService
         }
         finally
         {
-            _workspaceManager.Delete(workspace);
-            throttle.Release();
+            try
+            {
+                await File.WriteAllTextAsync(workspace.SourceFile, originalSource);
+                availableWorkers.Enqueue(workspace);
+            }
+            finally
+            {
+                throttle.Release();
+            }
         }
     }
 
