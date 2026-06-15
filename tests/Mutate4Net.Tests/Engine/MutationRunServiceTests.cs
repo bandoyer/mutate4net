@@ -62,6 +62,32 @@ public sealed class MutationRunServiceTests
         Assert.Contains("bool Flag() => true;", await File.ReadAllTextAsync(sample.Path));
     }
 
+    [Fact]
+    public async Task RunAsync_MaxWorkersRunsAllMutantsWithDeterministicReportOrder()
+    {
+        using var sample = SampleFile.Create("""
+            class Sample
+            {
+                bool First() => true;
+                bool Second() => false;
+            }
+            """);
+        var executor = new FakeCommandExecutor(
+            new CommandResult(0, "baseline ok", 10, false),
+            new CommandResult(1, "first mutant failed", 11, false),
+            new CommandResult(1, "second mutant failed", 12, false));
+        var service = CreateService(executor);
+
+        MutationRunOutcome outcome = await service.RunAsync(Arguments(sample.Path, maxWorkers: 2));
+
+        Assert.Equal(0, outcome.ExitCode);
+        Assert.Equal(3, executor.RunCount);
+        Assert.Contains("Summary: 2 killed, 0 survived, 2 total.", outcome.Output);
+        Assert.True(
+            outcome.Output.IndexOf("replace true with false", StringComparison.Ordinal) <
+            outcome.Output.IndexOf("replace false with true", StringComparison.Ordinal));
+    }
+
 
     [Fact]
     public async Task RunAsync_ReturnsSurvivedAndRestoresOriginal_WhenMutantSurvives()
@@ -264,7 +290,8 @@ public sealed class MutationRunServiceTests
         IReadOnlySet<int>? lines = null,
         bool mutateAll = false,
         bool reuseCoverage = false,
-        string? testCommand = "fake") =>
+        string? testCommand = "fake",
+        int maxWorkers = 1) =>
         new(
             path,
             CliMode.Mutate,
@@ -273,7 +300,7 @@ public sealed class MutationRunServiceTests
             SinceLastRun: false,
             MutateAll: mutateAll,
             MutationWarning: 50,
-            MaxWorkers: 1,
+            MaxWorkers: maxWorkers,
             TimeoutFactor: 10,
             TestCommand: testCommand,
             Verbose: false);
@@ -282,6 +309,7 @@ public sealed class MutationRunServiceTests
     {
         private readonly Queue<CommandResult> _results;
         private readonly Action<int, IReadOnlyList<string>, string>? _onRun;
+        private readonly object _gate = new();
 
         public FakeCommandExecutor(params CommandResult[] results)
             : this(null, results)
@@ -304,14 +332,17 @@ public sealed class MutationRunServiceTests
             long timeoutMillis,
             CancellationToken cancellationToken = default)
         {
-            if (_results.Count == 0)
+            lock (_gate)
             {
-                throw new InvalidOperationException("No fake command result is queued.");
-            }
+                if (_results.Count == 0)
+                {
+                    throw new InvalidOperationException("No fake command result is queued.");
+                }
 
-            RunCount++;
-            _onRun?.Invoke(RunCount, command, workingDirectory);
-            return Task.FromResult(_results.Dequeue());
+                RunCount++;
+                _onRun?.Invoke(RunCount, command, workingDirectory);
+                return Task.FromResult(_results.Dequeue());
+            }
         }
     }
 }

@@ -89,7 +89,8 @@ public sealed class MutationRunService
             analysis.Source,
             coverageSelection.Covered,
             command,
-            TimeoutMillis(baseline.DurationMillis, arguments.TimeoutFactor));
+            TimeoutMillis(baseline.DurationMillis, arguments.TimeoutFactor),
+            arguments.MaxWorkers);
 
         bool survived = results.Any(result => !result.Killed);
         if (!survived)
@@ -119,40 +120,65 @@ public sealed class MutationRunService
         string originalSource,
         IReadOnlyList<MutationSite> sites,
         TestCommand command,
-        long timeoutMillis)
+        long timeoutMillis,
+        int maxWorkers)
     {
-        var results = new List<MutationResult>();
         if (sites.Count == 0)
         {
-            return results;
+            return [];
         }
 
+        int workerCount = Math.Max(1, Math.Min(maxWorkers, sites.Count));
+        using var throttle = new SemaphoreSlim(workerCount, workerCount);
+        Task<MutationResult>[] tasks = sites
+            .Select((site, index) => RunMutantAsync(
+                sourceFile,
+                moduleRoot,
+                originalSource,
+                site,
+                command,
+                timeoutMillis,
+                index + 1,
+                sites.Count,
+                throttle))
+            .ToArray();
+
+        MutationResult[] results = await Task.WhenAll(tasks);
+        return results.OrderBy(result => result.Order).ToArray();
+    }
+
+    private async Task<MutationResult> RunMutantAsync(
+        string sourceFile,
+        string moduleRoot,
+        string originalSource,
+        MutationSite site,
+        TestCommand command,
+        long timeoutMillis,
+        int order,
+        int totalJobs,
+        SemaphoreSlim throttle)
+    {
+        await throttle.WaitAsync();
         WorkerWorkspace workspace = _workspaceManager.Create(moduleRoot, sourceFile);
         try
         {
             TestCommand workerCommand = _testCommandFactory.Create(workspace.SourceFile, command.IsCustom ? command.DisplayCommand : null);
-            for (int i = 0; i < sites.Count; i++)
-            {
-                MutationSite site = sites[i];
-                string mutated = originalSource[..site.Start] + site.Replacement + originalSource[site.End..];
-                await File.WriteAllTextAsync(workspace.SourceFile, mutated);
-                CommandResult result = await _executor.RunAsync(workerCommand.Command, workerCommand.WorkingDirectory, timeoutMillis);
-                results.Add(new MutationResult(
-                    site,
-                    result.ExitCode != 0 || result.TimedOut,
-                    result.DurationMillis,
-                    result.TimedOut,
-                    i + 1,
-                    sites.Count));
-                await File.WriteAllTextAsync(workspace.SourceFile, originalSource);
-            }
+            string mutated = originalSource[..site.Start] + site.Replacement + originalSource[site.End..];
+            await File.WriteAllTextAsync(workspace.SourceFile, mutated);
+            CommandResult result = await _executor.RunAsync(workerCommand.Command, workerCommand.WorkingDirectory, timeoutMillis);
+            return new MutationResult(
+                site,
+                result.ExitCode != 0 || result.TimedOut,
+                result.DurationMillis,
+                result.TimedOut,
+                order,
+                totalJobs);
         }
         finally
         {
             _workspaceManager.Delete(workspace);
+            throttle.Release();
         }
-
-        return results;
     }
 
     private static long TimeoutMillis(long baselineDurationMillis, int timeoutFactor) =>
