@@ -276,6 +276,102 @@ public sealed class MutationCatalogTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_DiscoversBooleanConditionMutators()
+    {
+        const string source = """
+            class Sample
+            {
+                int Count(int value)
+                {
+                    if (value > 0)
+                    {
+                        value++;
+                    }
+
+                    while (value < 10)
+                    {
+                        value++;
+                    }
+
+                    do
+                    {
+                        value++;
+                    }
+                    while (value != 12);
+
+                    for (; value < 20; value++)
+                    {
+                        value++;
+                    }
+
+                    return value == 20 ? 1 : 0;
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "boolean",
+            MutatorId: "boolean-condition",
+            Original: "value > 0",
+            Replacement: "true"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "boolean",
+            MutatorId: "boolean-condition",
+            Original: "value > 0",
+            Replacement: "false"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "boolean",
+            MutatorId: "boolean-condition",
+            Original: "value < 20",
+            Replacement: "true"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "boolean",
+            MutatorId: "boolean-condition",
+            Original: "value == 20",
+            Replacement: "false"
+        });
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_DoesNotAddBooleanConditionMutatorsForLiteralConditions()
+    {
+        const string source = """
+            class Sample
+            {
+                void Count()
+                {
+                    if (true)
+                    {
+                    }
+
+                    while (false)
+                    {
+                    }
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.DoesNotContain(analysis.Sites, site => site is
+        {
+            Category: "boolean",
+            MutatorId: "boolean-condition"
+        });
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_DiscoversSupportedLinqMethodMutators()
     {
         const string source = """

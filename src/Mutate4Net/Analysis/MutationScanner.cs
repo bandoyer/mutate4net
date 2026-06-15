@@ -159,8 +159,34 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         base.VisitBinaryPattern(node);
     }
 
+    public override void VisitIfStatement(IfStatementSyntax node)
+    {
+        AddBooleanConditionReplacement(node.Condition);
+        base.VisitIfStatement(node);
+    }
+
+    public override void VisitWhileStatement(WhileStatementSyntax node)
+    {
+        AddBooleanConditionReplacement(node.Condition);
+        base.VisitWhileStatement(node);
+    }
+
+    public override void VisitDoStatement(DoStatementSyntax node)
+    {
+        AddBooleanConditionReplacement(node.Condition);
+        base.VisitDoStatement(node);
+    }
+
+    public override void VisitForStatement(ForStatementSyntax node)
+    {
+        AddBooleanConditionReplacement(node.Condition);
+        base.VisitForStatement(node);
+    }
+
     public override void VisitConditionalExpression(ConditionalExpressionSyntax node)
     {
+        AddBooleanConditionReplacement(node.Condition);
+
         string original = _source[node.Span.Start..node.Span.End];
         AddSite(
             node,
@@ -286,6 +312,21 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
             $"replace {name.Identifier.ValueText} with {replacement}",
             "string-method",
             "string");
+    }
+
+    private void AddBooleanConditionReplacement(ExpressionSyntax? condition)
+    {
+        if (condition is null ||
+            condition.IsKind(SyntaxKind.TrueLiteralExpression) ||
+            condition.IsKind(SyntaxKind.FalseLiteralExpression) ||
+            !IsBool(condition))
+        {
+            return;
+        }
+
+        string original = _source[condition.Span.Start..condition.Span.End];
+        AddSite(condition, condition.Span, original, "true", "replace condition with true", "boolean-condition", "boolean");
+        AddSite(condition, condition.Span, original, "false", "replace condition with false", "boolean-condition", "boolean");
     }
 
     private void AddNullReplacement(ExpressionSyntax? expression)
@@ -418,6 +459,13 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
     {
         ITypeSymbol? type = _semanticModel.GetTypeInfo(expression).Type;
         return type?.SpecialType == SpecialType.System_String;
+    }
+
+    private bool IsBool(ExpressionSyntax expression)
+    {
+        TypeInfo typeInfo = _semanticModel.GetTypeInfo(expression);
+        ITypeSymbol? type = typeInfo.ConvertedType ?? typeInfo.Type;
+        return type?.SpecialType == SpecialType.System_Boolean;
     }
 
     private bool IsReferenceOrNullable(ExpressionSyntax expression)
