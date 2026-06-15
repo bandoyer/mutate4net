@@ -95,7 +95,7 @@ public sealed class MutationRunService
             arguments.MaxWorkers);
 
         bool survived = results.Any(result => !result.Killed);
-        if (!survived)
+        if (!survived && ShouldWriteManifest(arguments))
         {
             await _manifestSupport.WriteAsync(
                 arguments.TargetFile,
@@ -206,6 +206,9 @@ public sealed class MutationRunService
 
     private static long TimeoutMillis(long baselineDurationMillis, int timeoutFactor) =>
         Math.Max(1_000, baselineDurationMillis * timeoutFactor);
+
+    private static bool ShouldWriteManifest(CliArguments arguments) =>
+        arguments.Lines.Count == 0;
 
     private static CliArguments NormalizeTestProjectSelectors(CliArguments arguments, string workingDirectory) =>
         arguments with

@@ -187,6 +187,29 @@ public sealed class MutationRunServiceTests
     }
 
     [Fact]
+    public async Task RunAsync_LineSelectionDoesNotWriteManifest()
+    {
+        const string source = """
+            class Sample
+            {
+                bool First() => true;
+                bool Second() => false;
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+        var executor = new FakeCommandExecutor(
+            new CommandResult(0, "baseline ok", 10, false),
+            new CommandResult(1, "mutant failed", 11, false));
+        var service = CreateService(executor);
+
+        MutationRunOutcome outcome = await service.RunAsync(Arguments(sample.Path, lines: new HashSet<int> { 3 }));
+
+        Assert.Equal(0, outcome.ExitCode);
+        Assert.Contains("Line-filtered run; manifest not updated.", outcome.Output);
+        Assert.DoesNotContain("mutate4net-manifest", await File.ReadAllTextAsync(sample.Path));
+    }
+
+    [Fact]
     public async Task RunAsync_UnchangedManifestRunsNoMutants()
     {
         using var sample = SampleFile.Create("""

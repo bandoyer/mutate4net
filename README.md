@@ -68,6 +68,8 @@ Restrict to specific source lines:
 mutate4net path/to/File.cs --lines 12,18
 ```
 
+Line-filtered runs are treated as partial smoke checks and do not update the embedded manifest.
+
 Ignore the manifest and test all discovered sites:
 
 ```powershell

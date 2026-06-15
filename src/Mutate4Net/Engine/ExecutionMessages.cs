@@ -32,6 +32,11 @@ public sealed class ExecutionMessages
             extra.Append("No mutations need testing.\n");
         }
 
+        if (arguments.Lines.Count > 0)
+        {
+            extra.Append("Line-filtered run; manifest not updated.\n");
+        }
+
         if (!coverageRun.ReportAvailable)
         {
             if (!string.IsNullOrWhiteSpace(arguments.TestCommand))

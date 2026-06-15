@@ -42,6 +42,8 @@ public sealed class WorkerWorkspaceManager
         if (Directory.Exists(workspace.RunRoot))
         {
             Directory.Delete(workspace.RunRoot, recursive: true);
+            PruneEmptyDirectory(Path.GetDirectoryName(workspace.RunRoot));
+            PruneEmptyDirectory(Path.GetDirectoryName(Path.GetDirectoryName(workspace.RunRoot)!));
         }
     }
 
@@ -65,5 +67,17 @@ public sealed class WorkerWorkspaceManager
             string destination = Path.Combine(destinationDirectory, Path.GetFileName(file));
             File.Copy(file, destination, overwrite: true);
         }
+    }
+
+    private static void PruneEmptyDirectory(string? directory)
+    {
+        if (string.IsNullOrWhiteSpace(directory) ||
+            !Directory.Exists(directory) ||
+            Directory.EnumerateFileSystemEntries(directory).Any())
+        {
+            return;
+        }
+
+        Directory.Delete(directory);
     }
 }
