@@ -1,0 +1,15 @@
+namespace Mutate4Net.Cli;
+
+public sealed record CliArguments(
+    string TargetFile,
+    CliMode Mode,
+    bool ReuseCoverage,
+    IReadOnlySet<int> Lines,
+    bool SinceLastRun,
+    bool MutateAll,
+    int MutationWarning,
+    int MaxWorkers,
+    int TimeoutFactor,
+    string? TestCommand,
+    bool Verbose);
+
