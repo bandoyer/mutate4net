@@ -34,6 +34,7 @@ public sealed class MutationCatalogTests
         Assert.Contains(analysis.Sites, site => site.Description == "replace - with removed -");
         Assert.Contains(analysis.Sites, site => site.Description == "replace + with -");
         Assert.Contains(analysis.Sites, site => site.Description == "replace 1 with 0");
+        Assert.Contains(analysis.Sites, site => site is { Category: "string", MutatorId: "string-literal" });
         Assert.Contains(analysis.Sites, site => site.Replacement == "null");
         Assert.Contains(analysis.Sites, site => site is { Category: "boolean", MutatorId: "boolean-negation" });
         Assert.Contains(analysis.Sites, site => site is { Category: "arithmetic", MutatorId: "arithmetic-operator" });
@@ -58,6 +59,99 @@ public sealed class MutationCatalogTests
         var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
 
         Assert.DoesNotContain(analysis.Sites, site => site.Original == "+" && site.Replacement == "-");
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_DiscoversRicherExpressionMutators()
+    {
+        const string source = """
+            class Sample
+            {
+                int Change(int count)
+                {
+                    count += 2;
+                    count++;
+                    --count;
+                    return count * 42;
+                }
+
+                string Label()
+                {
+                    string value = "";
+                    return "ready";
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "literal",
+            MutatorId: "numeric-literal",
+            Description: "replace 2 with 0"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "literal",
+            MutatorId: "numeric-literal",
+            Description: "replace 42 with 0"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "assignment",
+            MutatorId: "assignment-operator",
+            Description: "replace += with -="
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "update",
+            MutatorId: "update-operator",
+            Description: "replace ++ with --"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "update",
+            MutatorId: "update-operator",
+            Description: "replace -- with ++"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "string",
+            MutatorId: "string-literal",
+            Description: "replace empty string with \"mutate4net\""
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "string",
+            MutatorId: "string-literal",
+            Description: "replace \"ready\" with empty string"
+        });
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_DoesNotTreatStringCompoundAssignmentAsNumericAssignment()
+    {
+        const string source = """
+            class Sample
+            {
+                void Append(string suffix)
+                {
+                    string value = "start";
+                    value += suffix;
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.DoesNotContain(analysis.Sites, site => site is
+        {
+            Category: "assignment",
+            MutatorId: "assignment-operator"
+        });
     }
 
     [Fact]

@@ -43,10 +43,19 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
             AddSite(node, node.Token.Span, "false", "true", "replace false with true", "boolean-literal", "boolean");
         }
         else if (node.IsKind(SyntaxKind.NumericLiteralExpression) &&
-                 (node.Token.Text == "0" || node.Token.Text == "1"))
+                 IsNumeric(node))
         {
-            string replacement = node.Token.Text == "0" ? "1" : "0";
+            string replacement = IsNumericValue(node.Token.Value, 0) ? "1" : "0";
             AddSite(node, node.Token.Span, node.Token.Text, replacement, $"replace {node.Token.Text} with {replacement}", "numeric-literal", "literal");
+        }
+        else if (node.IsKind(SyntaxKind.StringLiteralExpression) &&
+                 IsString(node))
+        {
+            string replacement = node.Token.ValueText.Length == 0 ? "\"mutate4net\"" : "\"\"";
+            string description = node.Token.ValueText.Length == 0
+                ? "replace empty string with \"mutate4net\""
+                : $"replace {node.Token.Text} with empty string";
+            AddSite(node, node.Token.Span, node.Token.Text, replacement, description, "string-literal", "string");
         }
 
         base.VisitLiteralExpression(node);
@@ -76,12 +85,42 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         {
             AddSite(node, node.OperatorToken.Span, "!", string.Empty, "replace ! with removed !", "boolean-negation", "boolean");
         }
+        else if (UpdateOperatorFor(node.Kind()) is { } updateOp &&
+                 IsNumeric(node.Operand))
+        {
+            AddSite(
+                node,
+                node.OperatorToken.Span,
+                updateOp.Original,
+                updateOp.Replacement,
+                $"replace {updateOp.Original} with {updateOp.Replacement}",
+                "update-operator",
+                "update");
+        }
         else if (node.IsKind(SyntaxKind.UnaryMinusExpression) && IsNumeric(node.Operand))
         {
             AddSite(node, node.OperatorToken.Span, "-", string.Empty, "replace - with removed -", "unary-operator", "unary");
         }
 
         base.VisitPrefixUnaryExpression(node);
+    }
+
+    public override void VisitPostfixUnaryExpression(PostfixUnaryExpressionSyntax node)
+    {
+        if (UpdateOperatorFor(node.Kind()) is { } updateOp &&
+            IsNumeric(node.Operand))
+        {
+            AddSite(
+                node,
+                node.OperatorToken.Span,
+                updateOp.Original,
+                updateOp.Replacement,
+                $"replace {updateOp.Original} with {updateOp.Replacement}",
+                "update-operator",
+                "update");
+        }
+
+        base.VisitPostfixUnaryExpression(node);
     }
 
     public override void VisitRelationalPattern(RelationalPatternSyntax node)
@@ -134,6 +173,19 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
 
     public override void VisitAssignmentExpression(AssignmentExpressionSyntax node)
     {
+        if (AssignmentOperatorFor(node.Kind()) is { } assignmentOp &&
+            IsNumeric(node.Left))
+        {
+            AddSite(
+                node,
+                node.OperatorToken.Span,
+                assignmentOp.Original,
+                assignmentOp.Replacement,
+                $"replace {assignmentOp.Original} with {assignmentOp.Replacement}",
+                "assignment-operator",
+                "assignment");
+        }
+
         AddNullReplacement(node.Right);
         base.VisitAssignmentExpression(node);
     }
@@ -264,6 +316,12 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         return type is not null && IsNumericType(type);
     }
 
+    private bool IsString(ExpressionSyntax expression)
+    {
+        ITypeSymbol? type = _semanticModel.GetTypeInfo(expression).Type;
+        return type?.SpecialType == SpecialType.System_String;
+    }
+
     private bool IsReferenceOrNullable(ExpressionSyntax expression)
     {
         TypeInfo typeInfo = _semanticModel.GetTypeInfo(expression);
@@ -321,6 +379,41 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         SyntaxKind.OrPattern => ("or", "and"),
         _ => null
     };
+
+    private static (string Original, string Replacement)? AssignmentOperatorFor(SyntaxKind kind) => kind switch
+    {
+        SyntaxKind.AddAssignmentExpression => ("+=", "-="),
+        SyntaxKind.SubtractAssignmentExpression => ("-=", "+="),
+        SyntaxKind.MultiplyAssignmentExpression => ("*=", "/="),
+        SyntaxKind.DivideAssignmentExpression => ("/=", "*="),
+        SyntaxKind.ModuloAssignmentExpression => ("%=", "*="),
+        _ => null
+    };
+
+    private static (string Original, string Replacement)? UpdateOperatorFor(SyntaxKind kind) => kind switch
+    {
+        SyntaxKind.PreIncrementExpression => ("++", "--"),
+        SyntaxKind.PostIncrementExpression => ("++", "--"),
+        SyntaxKind.PreDecrementExpression => ("--", "++"),
+        SyntaxKind.PostDecrementExpression => ("--", "++"),
+        _ => null
+    };
+
+    private static bool IsNumericValue(object? value, decimal expected)
+    {
+        try
+        {
+            return value is not null && Convert.ToDecimal(value) == expected;
+        }
+        catch (InvalidCastException)
+        {
+            return false;
+        }
+        catch (OverflowException)
+        {
+            return false;
+        }
+    }
 
     private static string Hash(string value)
     {

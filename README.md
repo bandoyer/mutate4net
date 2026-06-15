@@ -21,6 +21,7 @@ Implemented:
 - Explicit test project selection and exclusion.
 - Structured VSTest filters with zero-test detection.
 - Mutator metadata and include/exclude mutator filters.
+- Richer expression mutators for strings, numeric literals, compound assignments, and increment/decrement operators.
 
 Still maturing:
 
@@ -103,7 +104,7 @@ mutate4net path/to/File.cs --mutator boolean,logical
 mutate4net path/to/File.cs --exclude-mutator null
 ```
 
-Mutator-filtered runs are treated as partial smoke checks and do not update the embedded manifest. Current mutator categories include `arithmetic`, `boolean`, `equality`, `literal`, `logical`, `null`, and `unary`.
+Mutator-filtered runs are treated as partial smoke checks and do not update the embedded manifest. Current mutator categories include `arithmetic`, `assignment`, `boolean`, `equality`, `literal`, `logical`, `null`, `string`, `unary`, and `update`.
 
 Ignore the manifest and test all discovered sites:
 
