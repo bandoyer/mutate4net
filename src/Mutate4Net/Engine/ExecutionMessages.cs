@@ -1,5 +1,6 @@
 using System.Text;
 using Mutate4Net.Cli;
+using Mutate4Net.Execution;
 using Mutate4Net.Model;
 
 namespace Mutate4Net.Engine;
@@ -8,12 +9,34 @@ public sealed class ExecutionMessages
 {
     public string ExtraText(
         CliArguments arguments,
+        TestCommand command,
         DifferentialSelection differentialSelection,
         CoverageRun coverageRun,
         int coveredMutationSites,
         int uncoveredMutationSites)
     {
         var extra = new StringBuilder();
+        if (!string.IsNullOrWhiteSpace(arguments.ProjectFile))
+        {
+            extra.Append("Project: ").Append(arguments.ProjectFile).Append('\n');
+        }
+
+        extra.Append("Test command steps: ").Append(command.Commands.Count).Append('\n');
+        if (command.Commands.Count == 1)
+        {
+            extra.Append("Test command: ").Append(string.Join(' ', command.Command)).Append('\n');
+        }
+
+        if (arguments.TestProjects.Count > 0)
+        {
+            extra.Append("Selected test projects: ").Append(string.Join(", ", arguments.TestProjects)).Append('\n');
+        }
+
+        if (arguments.ExcludedTestProjects.Count > 0)
+        {
+            extra.Append("Excluded test projects: ").Append(string.Join(", ", arguments.ExcludedTestProjects)).Append('\n');
+        }
+
         extra.Append("Total mutation sites: ").Append(differentialSelection.TotalMutationSites).Append('\n');
         extra.Append("Covered mutation sites: ").Append(coveredMutationSites).Append('\n');
         extra.Append("Uncovered mutation sites: ").Append(uncoveredMutationSites).Append('\n');

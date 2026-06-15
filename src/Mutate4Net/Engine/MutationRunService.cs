@@ -108,6 +108,7 @@ public sealed class MutationRunService
             baseline,
             _messages.ExtraText(
                 arguments,
+                command,
                 differentialSelection,
                 coverageRun,
                 coverageSelection.Covered.Count,

@@ -28,9 +28,13 @@ public sealed class MutationRunServiceTests
 
         Assert.Equal(0, outcome.ExitCode);
         Assert.Contains("KILLED", outcome.Output);
+        Assert.Contains("Test command steps: 1", outcome.Output);
+        Assert.Contains("Test command: ", outcome.Output);
+        Assert.Contains("fake", outcome.Output);
         Assert.Contains("Coverage report available: false", outcome.Output);
         Assert.Contains("Custom test command supplied; treating all selected mutation sites as covered.", outcome.Output);
         Assert.Contains("Summary: 1 killed, 0 survived, 1 total.", outcome.Output);
+        Assert.Contains("Duration: 21 ms total (baseline 10 ms, mutants 11 ms).", outcome.Output);
         string finalSource = await File.ReadAllTextAsync(sample.Path);
         Assert.Contains("bool Flag() => true;", finalSource);
         Assert.Contains("mutate4net-manifest", finalSource);

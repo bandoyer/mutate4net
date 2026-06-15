@@ -22,6 +22,7 @@ public sealed class ReportFormatter
         AppendUncovered(projectRoot, uncovered, builder);
         AppendResults(projectRoot, results, builder);
         AppendSummary(uncovered, results, builder);
+        AppendDuration(baseline, results, builder);
         return builder.ToString();
     }
 
@@ -76,6 +77,18 @@ public sealed class ReportFormatter
             .Append(" total.\n");
     }
 
+    private static void AppendDuration(TestRun baseline, IReadOnlyList<MutationResult> results, StringBuilder builder)
+    {
+        long mutantMillis = results.Sum(result => result.DurationMillis);
+        builder.Append("Duration: ")
+            .Append(baseline.DurationMillis + mutantMillis)
+            .Append(" ms total (baseline ")
+            .Append(baseline.DurationMillis)
+            .Append(" ms, mutants ")
+            .Append(mutantMillis)
+            .Append(" ms).\n");
+    }
+
     private static string RelativePath(string projectRoot, string file)
     {
         try
@@ -88,4 +101,3 @@ public sealed class ReportFormatter
         }
     }
 }
-
