@@ -90,7 +90,17 @@ public sealed class CliApplication
             }
         }
 
-        MutationRunOutcome run = await _mutationRunService.RunAsync(outcome.Arguments);
+        MutationRunOutcome run;
+        try
+        {
+            run = await _mutationRunService.RunAsync(outcome.Arguments);
+        }
+        catch (Exception ex)
+        {
+            await error.WriteLineAsync($"Failed running mutations for {outcome.Arguments.TargetFile}: {ex.Message}");
+            return 1;
+        }
+
         if (!string.IsNullOrEmpty(run.Output))
         {
             await output.WriteAsync(run.Output);
