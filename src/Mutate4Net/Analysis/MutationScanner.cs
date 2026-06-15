@@ -188,6 +188,24 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         base.VisitInvocationExpression(node);
     }
 
+    public override void VisitExpressionStatement(ExpressionStatementSyntax node)
+    {
+        if (IsRemovableInvocationStatement(node))
+        {
+            string original = _source[node.Span.Start..node.Span.End];
+            AddSite(
+                node,
+                node.Span,
+                original,
+                string.Empty,
+                "remove invocation statement",
+                "statement-removal",
+                "statement");
+        }
+
+        base.VisitExpressionStatement(node);
+    }
+
     public override void VisitReturnStatement(ReturnStatementSyntax node)
     {
         AddNullReplacement(node.Expression);
@@ -507,6 +525,11 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         ns.ToDisplayString() == "System.Linq.Expressions" &&
         expressionType.TypeArguments[0].TypeKind == TypeKind.Delegate;
     }
+
+    private static bool IsRemovableInvocationStatement(ExpressionStatementSyntax node) =>
+        node.Parent is BlockSyntax &&
+        (node.Expression is InvocationExpressionSyntax ||
+         node.Expression is AwaitExpressionSyntax { Expression: InvocationExpressionSyntax });
 
     private static bool IsSystemLinqMethod(IMethodSymbol method)
     {

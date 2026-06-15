@@ -266,6 +266,84 @@ public sealed class MutationCatalogTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_DiscoversRemovableInvocationStatements()
+    {
+        const string source = """
+            using System.Threading.Tasks;
+
+            class Sample
+            {
+                async Task SaveAsync(Notifier notifier)
+                {
+                    notifier.Notify();
+                    await notifier.FlushAsync();
+                }
+            }
+
+            class Notifier
+            {
+                public void Notify()
+                {
+                }
+
+                public Task FlushAsync()
+                {
+                    return Task.CompletedTask;
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "statement",
+            MutatorId: "statement-removal",
+            Original: "notifier.Notify();",
+            Replacement: ""
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "statement",
+            MutatorId: "statement-removal",
+            Original: "await notifier.FlushAsync();",
+            Replacement: ""
+        });
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_DoesNotRemoveEmbeddedInvocationStatements()
+    {
+        const string source = """
+            class Sample
+            {
+                void Save(bool shouldSave, Notifier notifier)
+                {
+                    if (shouldSave)
+                        notifier.Notify();
+                }
+            }
+
+            class Notifier
+            {
+                public void Notify()
+                {
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.DoesNotContain(analysis.Sites, site => site is
+        {
+            Category: "statement",
+            MutatorId: "statement-removal"
+        });
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_DiscoversPatternOperators()
     {
         const string source = """
