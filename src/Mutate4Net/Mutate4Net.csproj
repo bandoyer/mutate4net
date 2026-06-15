@@ -4,6 +4,7 @@
     <OutputType>Exe</OutputType>
     <AssemblyName>mutate4net</AssemblyName>
     <PackageId>mutate4net</PackageId>
+    <Version>0.1.0</Version>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>mutate4net</ToolCommandName>
     <Description>Single-file mutation testing for C# projects.</Description>

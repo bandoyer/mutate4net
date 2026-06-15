@@ -30,6 +30,8 @@ public sealed class CliArgumentsParser
                 case "--help":
                 case "-h":
                     return ParseOutcome.Help();
+                case "--version":
+                    return ParseOutcome.Version();
                 case "--scan":
                     scan = true;
                     break;

@@ -13,6 +13,14 @@ public sealed class CliArgumentsParserTests
     }
 
     [Fact]
+    public void Parse_ReturnsVersion_ForVersionFlag()
+    {
+        ParseOutcome outcome = new CliArgumentsParser().Parse(["--version"]);
+
+        Assert.True(outcome.IsVersion);
+    }
+
+    [Fact]
     public void Parse_RejectsMissingTarget()
     {
         ParseOutcome outcome = new CliArgumentsParser().Parse([]);
@@ -46,4 +54,3 @@ public sealed class CliArgumentsParserTests
         Assert.Equal(System.IO.Path.GetFullPath(sample.Path), outcome.Arguments.TargetFile);
     }
 }
-

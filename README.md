@@ -38,6 +38,7 @@ dotnet test mutate4net.sln
 dotnet run --project src/Mutate4Net/Mutate4Net.csproj -- path/to/File.cs --scan
 dotnet run --project src/Mutate4Net/Mutate4Net.csproj -- path/to/File.cs --update-manifest
 dotnet run --project src/Mutate4Net/Mutate4Net.csproj -- path/to/File.cs
+dotnet run --project src/Mutate4Net/Mutate4Net.csproj -- --version
 ```
 
 ## Commands
@@ -126,4 +127,3 @@ scope.0.semanticHash=...
 ```
 
 When a manifest is present, mutate4net uses it to select only changed scopes. If nothing changed, no mutants are executed. Use `--mutate-all` to ignore the manifest.
-

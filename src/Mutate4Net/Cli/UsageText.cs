@@ -22,7 +22,7 @@ public static class UsageText
           --test-command CMD        Override the default dotnet test command.
           --verbose                 Print live worker progress.
           --help                    Show this help text.
+          --version                 Show the mutate4net version.
 
         """;
 }
-

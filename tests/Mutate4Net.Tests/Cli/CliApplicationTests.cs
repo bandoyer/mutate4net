@@ -5,6 +5,19 @@ namespace Mutate4Net.Tests.Cli;
 public sealed class CliApplicationTests
 {
     [Fact]
+    public async Task RunAsync_Version_PrintsVersionWithoutTarget()
+    {
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await new CliApplication().RunAsync(["--version"], output, error);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("mutate4net ", output.ToString());
+        Assert.Equal(string.Empty, error.ToString());
+    }
+
+    [Fact]
     public async Task RunAsync_UpdateManifest_WritesFooter()
     {
         using var sample = SampleFile.Create("""

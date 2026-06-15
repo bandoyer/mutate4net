@@ -2,6 +2,7 @@ using Mutate4Net.Analysis;
 using Mutate4Net.Engine;
 using Mutate4Net.Manifest;
 using Mutate4Net.Reporting;
+using System.Reflection;
 
 namespace Mutate4Net.Cli;
 
@@ -43,6 +44,12 @@ public sealed class CliApplication
         if (outcome.IsHelp)
         {
             await output.WriteAsync(UsageText.Text);
+            return 0;
+        }
+
+        if (outcome.IsVersion)
+        {
+            await output.WriteLineAsync($"mutate4net {VersionText()}");
             return 0;
         }
 
@@ -112,5 +119,13 @@ public sealed class CliApplication
         }
 
         return run.ExitCode;
+    }
+
+    private static string VersionText()
+    {
+        Assembly assembly = typeof(CliApplication).Assembly;
+        return assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+            ?? assembly.GetName().Version?.ToString()
+            ?? "unknown";
     }
 }
