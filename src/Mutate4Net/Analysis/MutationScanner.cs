@@ -235,8 +235,16 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
 
     public override void VisitReturnStatement(ReturnStatementSyntax node)
     {
+        AddReturnValueReplacement(node.Expression);
         AddNullReplacement(node.Expression);
         base.VisitReturnStatement(node);
+    }
+
+    public override void VisitArrowExpressionClause(ArrowExpressionClauseSyntax node)
+    {
+        AddReturnValueReplacement(node.Expression);
+        AddNullReplacement(node.Expression);
+        base.VisitArrowExpressionClause(node);
     }
 
     public override void VisitVariableDeclarator(VariableDeclaratorSyntax node)
@@ -327,6 +335,30 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         string original = _source[condition.Span.Start..condition.Span.End];
         AddSite(condition, condition.Span, original, "true", "replace condition with true", "boolean-condition", "boolean");
         AddSite(condition, condition.Span, original, "false", "replace condition with false", "boolean-condition", "boolean");
+    }
+
+    private void AddReturnValueReplacement(ExpressionSyntax? expression)
+    {
+        if (expression is null ||
+            expression is LiteralExpressionSyntax)
+        {
+            return;
+        }
+
+        string original = _source[expression.Span.Start..expression.Span.End];
+        if (IsBool(expression))
+        {
+            AddSite(expression, expression.Span, original, "true", "replace return value with true", "return-value", "return");
+            AddSite(expression, expression.Span, original, "false", "replace return value with false", "return-value", "return");
+        }
+        else if (IsNumeric(expression))
+        {
+            AddSite(expression, expression.Span, original, "0", "replace return value with 0", "return-value", "return");
+        }
+        else if (IsString(expression))
+        {
+            AddSite(expression, expression.Span, original, "\"\"", "replace return value with empty string", "return-value", "return");
+        }
     }
 
     private void AddNullReplacement(ExpressionSyntax? expression)

@@ -372,6 +372,113 @@ public sealed class MutationCatalogTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_DiscoversReturnValueMutators()
+    {
+        const string source = """
+            class Sample
+            {
+                bool IsPositive(int value)
+                {
+                    return value > 0;
+                }
+
+                int Double(int value)
+                {
+                    return value * 2;
+                }
+
+                string Normalize(string value)
+                {
+                    return value.Trim();
+                }
+
+                bool IsZero(int value) => value == 0;
+                int Next(int value) => value + 1;
+                string Lower(string value) => value.ToLowerInvariant();
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "return",
+            MutatorId: "return-value",
+            Original: "value > 0",
+            Replacement: "true"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "return",
+            MutatorId: "return-value",
+            Original: "value > 0",
+            Replacement: "false"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "return",
+            MutatorId: "return-value",
+            Original: "value * 2",
+            Replacement: "0"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "return",
+            MutatorId: "return-value",
+            Original: "value.Trim()",
+            Replacement: "\"\""
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "return",
+            MutatorId: "return-value",
+            Original: "value == 0",
+            Replacement: "false"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "return",
+            MutatorId: "return-value",
+            Original: "value + 1",
+            Replacement: "0"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "return",
+            MutatorId: "return-value",
+            Original: "value.ToLowerInvariant()",
+            Replacement: "\"\""
+        });
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_DoesNotAddReturnValueMutatorsForLiteralReturns()
+    {
+        const string source = """
+            class Sample
+            {
+                bool Flag()
+                {
+                    return true;
+                }
+
+                int Count() => 0;
+                string Name() => "ready";
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.DoesNotContain(analysis.Sites, site => site is
+        {
+            Category: "return",
+            MutatorId: "return-value"
+        });
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_DiscoversSupportedLinqMethodMutators()
     {
         const string source = """
