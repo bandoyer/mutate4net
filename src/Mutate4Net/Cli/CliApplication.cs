@@ -69,7 +69,9 @@ public sealed class CliApplication
                 await output.WriteAsync(_scanFormatter.Format(
                     analysis,
                     changedScopes.ManifestPresent ? changedScopes.AllScopeIds() : null,
-                    outcome.Arguments.Lines));
+                    outcome.Arguments.Lines,
+                    outcome.Arguments.IncludedMutators,
+                    outcome.Arguments.ExcludedMutators));
                 return 0;
             }
             catch (Exception ex)

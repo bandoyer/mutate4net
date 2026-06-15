@@ -42,6 +42,16 @@ public sealed class ExecutionMessages
             extra.Append("Excluded test projects: ").Append(string.Join(", ", arguments.ExcludedTestProjects)).Append('\n');
         }
 
+        if (arguments.IncludedMutators.Count > 0)
+        {
+            extra.Append("Included mutators: ").Append(string.Join(", ", arguments.IncludedMutators)).Append('\n');
+        }
+
+        if (arguments.ExcludedMutators.Count > 0)
+        {
+            extra.Append("Excluded mutators: ").Append(string.Join(", ", arguments.ExcludedMutators)).Append('\n');
+        }
+
         extra.Append("Total mutation sites: ").Append(differentialSelection.TotalMutationSites).Append('\n');
         extra.Append("Covered mutation sites: ").Append(coveredMutationSites).Append('\n');
         extra.Append("Uncovered mutation sites: ").Append(uncoveredMutationSites).Append('\n');
@@ -63,6 +73,11 @@ public sealed class ExecutionMessages
         if (arguments.Lines.Count > 0)
         {
             extra.Append("Line-filtered run; manifest not updated.\n");
+        }
+
+        if (arguments.IncludedMutators.Count > 0 || arguments.ExcludedMutators.Count > 0)
+        {
+            extra.Append("Mutator-filtered run; manifest not updated.\n");
         }
 
         if (!coverageRun.ReportAvailable)

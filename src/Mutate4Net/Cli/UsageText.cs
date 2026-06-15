@@ -14,6 +14,8 @@ public static class UsageText
           --update-manifest         Refresh the embedded mutate4net manifest.
           --reuse-coverage          Reuse existing coverage data.
           --lines 12,18             Restrict mutation to specific source lines.
+          --mutator ID              Include mutator category/id; comma-separated or repeat.
+          --exclude-mutator ID      Exclude mutator category/id; comma-separated or repeat.
           --since-last-run          Mutate only scopes changed since the manifest.
           --mutate-all              Ignore the manifest and mutate all covered sites.
           --mutation-warning N      Warn when selected mutation count exceeds N.

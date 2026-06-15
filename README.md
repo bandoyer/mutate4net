@@ -20,6 +20,7 @@ Implemented:
 - Parallel mutant execution with `--max-workers`.
 - Explicit test project selection and exclusion.
 - Structured VSTest filters with zero-test detection.
+- Mutator metadata and include/exclude mutator filters.
 
 Still maturing:
 
@@ -94,6 +95,15 @@ mutate4net path/to/File.cs --lines 12,18
 ```
 
 Line-filtered runs are treated as partial smoke checks and do not update the embedded manifest.
+
+Restrict to one or more mutator categories or IDs:
+
+```powershell
+mutate4net path/to/File.cs --mutator boolean,logical
+mutate4net path/to/File.cs --exclude-mutator null
+```
+
+Mutator-filtered runs are treated as partial smoke checks and do not update the embedded manifest. Current mutator categories include `arithmetic`, `boolean`, `equality`, `literal`, `logical`, `null`, and `unary`.
 
 Ignore the manifest and test all discovered sites:
 

@@ -25,6 +25,8 @@ public sealed class CliArgumentsParser
         string? testFilter = null;
         var testProjects = new List<string>();
         var excludedTestProjects = new List<string>();
+        var includedMutators = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        var excludedMutators = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
 
         for (int i = 0; i < args.Count; i++)
         {
@@ -149,6 +151,20 @@ public sealed class CliArgumentsParser
 
                     excludedTestProjects.Add(excludedTestProject);
                     break;
+                case "--mutator":
+                    if (!TryReadValueList(args, ref i, arg, includedMutators, out ParseOutcome? mutatorError))
+                    {
+                        return mutatorError!;
+                    }
+
+                    break;
+                case "--exclude-mutator":
+                    if (!TryReadValueList(args, ref i, arg, excludedMutators, out ParseOutcome? excludedMutatorError))
+                    {
+                        return excludedMutatorError!;
+                    }
+
+                    break;
                 default:
                     if (arg.StartsWith("--", StringComparison.Ordinal))
                     {
@@ -181,6 +197,12 @@ public sealed class CliArgumentsParser
             return ParseOutcome.Error($"Target file does not exist: {target}");
         }
 
+        string? mutatorOverlap = includedMutators.FirstOrDefault(mutator => excludedMutators.Contains(mutator));
+        if (mutatorOverlap is not null)
+        {
+            return ParseOutcome.Error($"Mutator filter includes and excludes the same value: {mutatorOverlap}");
+        }
+
         if (projectFile is not null)
         {
             projectFile = Path.GetFullPath(projectFile);
@@ -205,7 +227,8 @@ public sealed class CliArgumentsParser
             !string.IsNullOrWhiteSpace(testCommand),
             !string.IsNullOrWhiteSpace(testFilter),
             testProjects.Count > 0,
-            excludedTestProjects.Count > 0);
+            excludedTestProjects.Count > 0,
+            includedMutators.Count > 0 || excludedMutators.Count > 0);
         if (conflict is not null)
         {
             return ParseOutcome.Error(conflict);
@@ -227,7 +250,9 @@ public sealed class CliArgumentsParser
             testFilter,
             verbose,
             testProjects,
-            excludedTestProjects);
+            excludedTestProjects,
+            includedMutators,
+            excludedMutators);
 
         return ParseOutcome.Success(parsed);
     }
@@ -274,6 +299,37 @@ public sealed class CliArgumentsParser
         return true;
     }
 
+    private static bool TryReadValueList(
+        IReadOnlyList<string> args,
+        ref int index,
+        string option,
+        ISet<string> values,
+        out ParseOutcome? error)
+    {
+        if (!TryReadValue(args, ref index, option, out string raw, out error))
+        {
+            return false;
+        }
+
+        int before = values.Count;
+        foreach (string part in raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (part.Length > 0)
+            {
+                values.Add(part.ToLowerInvariant());
+            }
+        }
+
+        if (values.Count == before)
+        {
+            error = ParseOutcome.Error($"{option} requires at least one comma-separated value.");
+            return false;
+        }
+
+        error = null;
+        return true;
+    }
+
     private static bool TryParseLines(string raw, ISet<int> lines, out string? error)
     {
         foreach (string part in raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
@@ -307,7 +363,8 @@ public sealed class CliArgumentsParser
         bool hasTestCommand,
         bool hasTestFilter,
         bool hasTestProjects,
-        bool hasExcludedTestProjects)
+        bool hasExcludedTestProjects,
+        bool hasMutatorFilters)
     {
         if (scan && updateManifest)
         {
@@ -382,6 +439,11 @@ public sealed class CliArgumentsParser
         if (updateManifest && hasTestFilter)
         {
             return "--update-manifest may not be combined with --test-filter.";
+        }
+
+        if (updateManifest && hasMutatorFilters)
+        {
+            return "--update-manifest may not be combined with mutator filters.";
         }
 
         if (hasTestCommand && (hasTestProjects || hasExcludedTestProjects))

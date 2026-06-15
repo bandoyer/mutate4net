@@ -36,17 +36,17 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
     {
         if (node.IsKind(SyntaxKind.TrueLiteralExpression))
         {
-            AddSite(node, node.Token.Span, "true", "false", "replace true with false");
+            AddSite(node, node.Token.Span, "true", "false", "replace true with false", "boolean-literal", "boolean");
         }
         else if (node.IsKind(SyntaxKind.FalseLiteralExpression))
         {
-            AddSite(node, node.Token.Span, "false", "true", "replace false with true");
+            AddSite(node, node.Token.Span, "false", "true", "replace false with true", "boolean-literal", "boolean");
         }
         else if (node.IsKind(SyntaxKind.NumericLiteralExpression) &&
                  (node.Token.Text == "0" || node.Token.Text == "1"))
         {
             string replacement = node.Token.Text == "0" ? "1" : "0";
-            AddSite(node, node.Token.Span, node.Token.Text, replacement, $"replace {node.Token.Text} with {replacement}");
+            AddSite(node, node.Token.Span, node.Token.Text, replacement, $"replace {node.Token.Text} with {replacement}", "numeric-literal", "literal");
         }
 
         base.VisitLiteralExpression(node);
@@ -54,7 +54,7 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
 
     public override void VisitBinaryExpression(BinaryExpressionSyntax node)
     {
-        (string Original, string Replacement, bool NumericOnly)? op = OperatorFor(node.Kind());
+        (string Original, string Replacement, bool NumericOnly, string MutatorId, string Category)? op = OperatorFor(node.Kind());
         if (op is not null && (!op.Value.NumericOnly || IsNumeric(node)))
         {
             AddSite(
@@ -62,7 +62,9 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
                 node.OperatorToken.Span,
                 op.Value.Original,
                 op.Value.Replacement,
-                $"replace {op.Value.Original} with {op.Value.Replacement}");
+                $"replace {op.Value.Original} with {op.Value.Replacement}",
+                op.Value.MutatorId,
+                op.Value.Category);
         }
 
         base.VisitBinaryExpression(node);
@@ -72,11 +74,11 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
     {
         if (node.IsKind(SyntaxKind.LogicalNotExpression))
         {
-            AddSite(node, node.OperatorToken.Span, "!", string.Empty, "replace ! with removed !");
+            AddSite(node, node.OperatorToken.Span, "!", string.Empty, "replace ! with removed !", "boolean-negation", "boolean");
         }
         else if (node.IsKind(SyntaxKind.UnaryMinusExpression) && IsNumeric(node.Operand))
         {
-            AddSite(node, node.OperatorToken.Span, "-", string.Empty, "replace - with removed -");
+            AddSite(node, node.OperatorToken.Span, "-", string.Empty, "replace - with removed -", "unary-operator", "unary");
         }
 
         base.VisitPrefixUnaryExpression(node);
@@ -92,7 +94,9 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
                 node.OperatorToken.Span,
                 op.Value.Original,
                 op.Value.Replacement,
-                $"replace {op.Value.Original} with {op.Value.Replacement}");
+                $"replace {op.Value.Original} with {op.Value.Replacement}",
+                "equality-operator",
+                "equality");
         }
 
         base.VisitRelationalPattern(node);
@@ -108,7 +112,9 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
                 node.OperatorToken.Span,
                 op.Value.Original,
                 op.Value.Replacement,
-                $"replace {op.Value.Original} with {op.Value.Replacement}");
+                $"replace {op.Value.Original} with {op.Value.Replacement}",
+                "logical-operator",
+                "logical");
         }
 
         base.VisitBinaryPattern(node);
@@ -142,10 +148,17 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         }
 
         string original = _source[expression.Span.Start..expression.Span.End];
-        AddSite(expression, expression.Span, original, "null", "replace " + original + " with null");
+        AddSite(expression, expression.Span, original, "null", "replace " + original + " with null", "null-replacement", "null");
     }
 
-    private void AddSite(SyntaxNode node, TextSpan span, string original, string replacement, string description)
+    private void AddSite(
+        SyntaxNode node,
+        TextSpan span,
+        string original,
+        string replacement,
+        string description,
+        string mutatorId,
+        string category)
     {
         ScopeRef scope = ResolveScope(node);
         _sites.Add(new MutationSite(
@@ -156,6 +169,8 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
             original,
             replacement,
             description,
+            mutatorId,
+            category,
             scope.Id,
             scope.Kind,
             scope.StartLine,
@@ -274,20 +289,20 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         SpecialType.System_Double or
         SpecialType.System_Decimal;
 
-    private static (string Original, string Replacement, bool NumericOnly)? OperatorFor(SyntaxKind kind) => kind switch
+    private static (string Original, string Replacement, bool NumericOnly, string MutatorId, string Category)? OperatorFor(SyntaxKind kind) => kind switch
     {
-        SyntaxKind.AddExpression => ("+", "-", true),
-        SyntaxKind.SubtractExpression => ("-", "+", false),
-        SyntaxKind.MultiplyExpression => ("*", "/", false),
-        SyntaxKind.DivideExpression => ("/", "*", false),
-        SyntaxKind.LogicalAndExpression => ("&&", "||", false),
-        SyntaxKind.LogicalOrExpression => ("||", "&&", false),
-        SyntaxKind.EqualsExpression => ("==", "!=", false),
-        SyntaxKind.NotEqualsExpression => ("!=", "==", false),
-        SyntaxKind.GreaterThanExpression => (">", ">=", false),
-        SyntaxKind.GreaterThanOrEqualExpression => (">=", ">", false),
-        SyntaxKind.LessThanExpression => ("<", "<=", false),
-        SyntaxKind.LessThanOrEqualExpression => ("<=", "<", false),
+        SyntaxKind.AddExpression => ("+", "-", true, "arithmetic-operator", "arithmetic"),
+        SyntaxKind.SubtractExpression => ("-", "+", false, "arithmetic-operator", "arithmetic"),
+        SyntaxKind.MultiplyExpression => ("*", "/", false, "arithmetic-operator", "arithmetic"),
+        SyntaxKind.DivideExpression => ("/", "*", false, "arithmetic-operator", "arithmetic"),
+        SyntaxKind.LogicalAndExpression => ("&&", "||", false, "logical-operator", "logical"),
+        SyntaxKind.LogicalOrExpression => ("||", "&&", false, "logical-operator", "logical"),
+        SyntaxKind.EqualsExpression => ("==", "!=", false, "equality-operator", "equality"),
+        SyntaxKind.NotEqualsExpression => ("!=", "==", false, "equality-operator", "equality"),
+        SyntaxKind.GreaterThanExpression => (">", ">=", false, "equality-operator", "equality"),
+        SyntaxKind.GreaterThanOrEqualExpression => (">=", ">", false, "equality-operator", "equality"),
+        SyntaxKind.LessThanExpression => ("<", "<=", false, "equality-operator", "equality"),
+        SyntaxKind.LessThanOrEqualExpression => ("<=", "<", false, "equality-operator", "equality"),
         _ => null
     };
 

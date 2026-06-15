@@ -19,6 +19,7 @@ public sealed class MutationRunService
     private readonly WorkerWorkspaceManager _workspaceManager;
     private readonly ReportFormatter _reportFormatter;
     private readonly DifferentialSelector _selector;
+    private readonly MutatorFilter _mutatorFilter;
     private readonly LineFilter _lineFilter;
     private readonly CoverageRunner _coverageRunner;
     private readonly MutationCoverageFilter _coverageFilter;
@@ -32,6 +33,7 @@ public sealed class MutationRunService
             new TestCommandFactory(),
             new ReportFormatter(),
             new WorkerWorkspaceManager(),
+            null,
             null,
             new LineFilter(),
             null,
@@ -48,6 +50,7 @@ public sealed class MutationRunService
         ReportFormatter reportFormatter,
         WorkerWorkspaceManager? workspaceManager = null,
         DifferentialSelector? selector = null,
+        MutatorFilter? mutatorFilter = null,
         LineFilter? lineFilter = null,
         CoverageRunner? coverageRunner = null,
         MutationCoverageFilter? coverageFilter = null,
@@ -60,6 +63,7 @@ public sealed class MutationRunService
         _workspaceManager = workspaceManager ?? new WorkerWorkspaceManager();
         _reportFormatter = reportFormatter;
         _selector = selector ?? new DifferentialSelector(manifestSupport);
+        _mutatorFilter = mutatorFilter ?? new MutatorFilter();
         _lineFilter = lineFilter ?? new LineFilter();
         _coverageRunner = coverageRunner ?? new CoverageRunner(executor, testCommandFactory, new CoverageLoader());
         _coverageFilter = coverageFilter ?? new MutationCoverageFilter();
@@ -70,7 +74,11 @@ public sealed class MutationRunService
     {
         SourceAnalysis analysis = await _catalog.AnalyzeAsync(arguments.TargetFile, arguments.ProjectFile);
         DifferentialSelection differentialSelection = await _selector.SelectAsync(arguments.TargetFile, arguments, analysis);
-        IReadOnlyList<MutationSite> selectedSites = _lineFilter.Filter(differentialSelection.Selected, arguments.Lines);
+        IReadOnlyList<MutationSite> mutatorSelectedSites = _mutatorFilter.Filter(
+            differentialSelection.Selected,
+            arguments.IncludedMutators,
+            arguments.ExcludedMutators);
+        IReadOnlyList<MutationSite> selectedSites = _lineFilter.Filter(mutatorSelectedSites, arguments.Lines);
         TestCommand command = _testCommandFactory.Create(arguments);
         CliArguments runArguments = NormalizeTestProjectSelectors(arguments, command.WorkingDirectory);
         CoverageRun coverageRun = await _coverageRunner.RunBaselineAsync(runArguments, command);
@@ -215,7 +223,9 @@ public sealed class MutationRunService
         Math.Max(1_000, baselineDurationMillis * timeoutFactor);
 
     private static bool ShouldWriteManifest(CliArguments arguments) =>
-        arguments.Lines.Count == 0;
+        arguments.Lines.Count == 0 &&
+        arguments.IncludedMutators.Count == 0 &&
+        arguments.ExcludedMutators.Count == 0;
 
     private static CliArguments NormalizeTestProjectSelectors(CliArguments arguments, string workingDirectory) =>
         arguments with

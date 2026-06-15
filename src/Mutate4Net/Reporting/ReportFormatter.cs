@@ -35,6 +35,11 @@ public sealed class ReportFormatter
                 .Append(':')
                 .Append(site.Line)
                 .Append(' ')
+                .Append('[')
+                .Append(site.Category)
+                .Append(':')
+                .Append(site.MutatorId)
+                .Append("] ")
                 .Append(site.Description)
                 .Append('\n');
         }
@@ -49,6 +54,11 @@ public sealed class ReportFormatter
                 .Append(':')
                 .Append(result.Site.Line)
                 .Append(' ')
+                .Append('[')
+                .Append(result.Site.Category)
+                .Append(':')
+                .Append(result.Site.MutatorId)
+                .Append("] ")
                 .Append(result.Site.Description)
                 .Append(" (")
                 .Append(result.DurationMillis)

@@ -15,4 +15,6 @@ public sealed record CliArguments(
     string? TestFilter,
     bool Verbose,
     IReadOnlyList<string> TestProjects,
-    IReadOnlyList<string> ExcludedTestProjects);
+    IReadOnlyList<string> ExcludedTestProjects,
+    IReadOnlySet<string> IncludedMutators,
+    IReadOnlySet<string> ExcludedMutators);

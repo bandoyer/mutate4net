@@ -201,7 +201,9 @@ public sealed class CoverageRunnerTests
             TestFilter: null,
             Verbose: false,
             TestProjects: testProjects ?? [],
-            ExcludedTestProjects: excludedTestProjects ?? []);
+            ExcludedTestProjects: excludedTestProjects ?? [],
+            IncludedMutators: new HashSet<string>(),
+            ExcludedMutators: new HashSet<string>());
 
     private static string TestProjectXml() =>
         """

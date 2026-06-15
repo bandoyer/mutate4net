@@ -35,6 +35,9 @@ public sealed class MutationCatalogTests
         Assert.Contains(analysis.Sites, site => site.Description == "replace + with -");
         Assert.Contains(analysis.Sites, site => site.Description == "replace 1 with 0");
         Assert.Contains(analysis.Sites, site => site.Replacement == "null");
+        Assert.Contains(analysis.Sites, site => site is { Category: "boolean", MutatorId: "boolean-negation" });
+        Assert.Contains(analysis.Sites, site => site is { Category: "arithmetic", MutatorId: "arithmetic-operator" });
+        Assert.Contains(analysis.Sites, site => site is { Category: "null", MutatorId: "null-replacement" });
         Assert.NotEmpty(analysis.Scopes);
     }
 

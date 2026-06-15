@@ -256,6 +256,36 @@ public sealed class MutationRunServiceTests
     }
 
     [Fact]
+    public async Task RunAsync_MutatorSelectionRunsOnlyIncludedMutatorsAndDoesNotWriteManifest()
+    {
+        const string source = """
+            class Sample
+            {
+                bool Flag() => true;
+                int Count() => 0;
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+        var executor = new FakeCommandExecutor(
+            new CommandResult(0, "baseline ok", 10, false),
+            new CommandResult(1, "mutant failed", 11, false));
+        var service = CreateService(executor);
+
+        MutationRunOutcome outcome = await service.RunAsync(Arguments(
+            sample.Path,
+            includedMutators: new HashSet<string> { "boolean" }));
+
+        Assert.Equal(0, outcome.ExitCode);
+        Assert.Equal(2, executor.RunCount);
+        Assert.Contains("Included mutators: boolean", outcome.Output);
+        Assert.Contains("Mutator-filtered run; manifest not updated.", outcome.Output);
+        Assert.Contains("[boolean:boolean-literal] replace true with false", outcome.Output);
+        Assert.DoesNotContain("[literal:numeric-literal]", outcome.Output);
+        Assert.Contains("Summary: 1 killed, 0 survived, 1 total.", outcome.Output);
+        Assert.Equal(source, await File.ReadAllTextAsync(sample.Path));
+    }
+
+    [Fact]
     public async Task RunAsync_UnchangedManifestRunsNoMutants()
     {
         using var sample = SampleFile.Create("""
@@ -396,7 +426,9 @@ public sealed class MutationRunServiceTests
         bool reuseCoverage = false,
         string? testCommand = "fake",
         string? projectFile = null,
-        int maxWorkers = 1) =>
+        int maxWorkers = 1,
+        IReadOnlySet<string>? includedMutators = null,
+        IReadOnlySet<string>? excludedMutators = null) =>
         new(
             path,
             CliMode.Mutate,
@@ -412,7 +444,9 @@ public sealed class MutationRunServiceTests
             TestFilter: null,
             Verbose: false,
             TestProjects: [],
-            ExcludedTestProjects: []);
+            ExcludedTestProjects: [],
+            IncludedMutators: includedMutators ?? new HashSet<string>(),
+            ExcludedMutators: excludedMutators ?? new HashSet<string>());
 
     private sealed class FakeCommandExecutor : ICommandExecutor
     {

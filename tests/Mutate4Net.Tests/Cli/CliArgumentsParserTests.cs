@@ -94,6 +94,29 @@ public sealed class CliArgumentsParserTests
     }
 
     [Fact]
+    public void Parse_ReadsMutatorFilters()
+    {
+        using var sample = SampleFile.Create("class Sample { }");
+
+        ParseOutcome outcome = new CliArgumentsParser().Parse([
+            sample.Path,
+            "--mutator",
+            "boolean, logical",
+            "--mutator",
+            "null-replacement",
+            "--exclude-mutator",
+            "numeric-literal"
+        ]);
+
+        Assert.True(outcome.IsSuccess);
+        Assert.NotNull(outcome.Arguments);
+        Assert.Contains("boolean", outcome.Arguments.IncludedMutators);
+        Assert.Contains("logical", outcome.Arguments.IncludedMutators);
+        Assert.Contains("null-replacement", outcome.Arguments.IncludedMutators);
+        Assert.Contains("numeric-literal", outcome.Arguments.ExcludedMutators);
+    }
+
+    [Fact]
     public void Parse_ReadsExplicitProject()
     {
         using var sample = SampleFile.Create("class Sample { }");
@@ -170,5 +193,38 @@ public sealed class CliArgumentsParserTests
 
         Assert.False(outcome.IsSuccess);
         Assert.Contains("--scan may not be combined with --test-filter", outcome.ErrorMessage);
+    }
+
+    [Fact]
+    public void Parse_RejectsOverlappingMutatorFilters()
+    {
+        using var sample = SampleFile.Create("class Sample { }");
+
+        ParseOutcome outcome = new CliArgumentsParser().Parse([
+            sample.Path,
+            "--mutator",
+            "boolean",
+            "--exclude-mutator",
+            "BOOLEAN"
+        ]);
+
+        Assert.False(outcome.IsSuccess);
+        Assert.Contains("includes and excludes", outcome.ErrorMessage);
+    }
+
+    [Fact]
+    public void Parse_RejectsUpdateManifestWithMutatorFilter()
+    {
+        using var sample = SampleFile.Create("class Sample { }");
+
+        ParseOutcome outcome = new CliArgumentsParser().Parse([
+            sample.Path,
+            "--update-manifest",
+            "--mutator",
+            "boolean"
+        ]);
+
+        Assert.False(outcome.IsSuccess);
+        Assert.Contains("--update-manifest may not be combined with mutator filters", outcome.ErrorMessage);
     }
 }
