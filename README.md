@@ -34,6 +34,29 @@ dotnet build mutate4net.sln
 dotnet test mutate4net.sln
 ```
 
+## Install As A Tool
+
+Build a local package:
+
+```powershell
+dotnet pack src/Mutate4Net/Mutate4Net.csproj --configuration Release -o artifacts/packages
+```
+
+Install it globally from the local package feed:
+
+```powershell
+dotnet tool install --global mutate4net --add-source artifacts/packages --version 0.1.0
+mutate4net --version
+```
+
+For a repo-local tool manifest:
+
+```powershell
+dotnet new tool-manifest
+dotnet tool install mutate4net --add-source artifacts/packages --version 0.1.0
+dotnet tool run mutate4net -- --version
+```
+
 ## Run From Source
 
 ```powershell
@@ -165,3 +188,11 @@ scope.0.semanticHash=...
 ```
 
 When a manifest is present, mutate4net uses it to select only changed scopes. If nothing changed, no mutants are executed. Use `--mutate-all` to ignore the manifest.
+
+## Release Checklist
+
+1. Update `Version` in `src/Mutate4Net/Mutate4Net.csproj` and add a `CHANGELOG.md` entry.
+2. Run `dotnet test mutate4net.sln --configuration Release`.
+3. Run `dotnet pack src/Mutate4Net/Mutate4Net.csproj --configuration Release -o artifacts/packages`.
+4. Install the produced package in a clean repo and verify `mutate4net --version`.
+5. Tag the commit as `v<version>` after the package has been validated.

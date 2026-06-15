@@ -5,6 +5,12 @@
     <AssemblyName>mutate4net</AssemblyName>
     <PackageId>mutate4net</PackageId>
     <Version>0.1.0</Version>
+    <Title>mutate4net</Title>
+    <Authors>mutate4net contributors</Authors>
+    <Product>mutate4net</Product>
+    <PackageTags>mutation-testing;testing;roslyn;dotnet-tool;csharp</PackageTags>
+    <PackageReleaseNotes>Initial mutate4net port with scan, manifest, coverage, test-project selection, parallel workers, and report output.</PackageReleaseNotes>
+    <RepositoryType>git</RepositoryType>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>mutate4net</ToolCommandName>
     <Description>Single-file mutation testing for C# projects.</Description>
@@ -16,6 +22,7 @@
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\CHANGELOG.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <ItemGroup>
