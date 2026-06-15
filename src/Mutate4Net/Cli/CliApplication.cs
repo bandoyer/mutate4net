@@ -1,4 +1,5 @@
 using Mutate4Net.Analysis;
+using Mutate4Net.Engine;
 using Mutate4Net.Manifest;
 using Mutate4Net.Reporting;
 
@@ -9,10 +10,16 @@ public sealed class CliApplication
     private readonly CliArgumentsParser _parser;
     private readonly MutationCatalog _catalog;
     private readonly ManifestSupport _manifestSupport;
+    private readonly MutationRunService _mutationRunService;
     private readonly ScanReportFormatter _scanFormatter;
 
     public CliApplication()
-        : this(new CliArgumentsParser(), new MutationCatalog(), new ManifestSupport(), new ScanReportFormatter())
+        : this(
+            new CliArgumentsParser(),
+            new MutationCatalog(),
+            new ManifestSupport(),
+            new MutationRunService(),
+            new ScanReportFormatter())
     {
     }
 
@@ -20,11 +27,13 @@ public sealed class CliApplication
         CliArgumentsParser parser,
         MutationCatalog catalog,
         ManifestSupport manifestSupport,
+        MutationRunService mutationRunService,
         ScanReportFormatter scanFormatter)
     {
         _parser = parser;
         _catalog = catalog;
         _manifestSupport = manifestSupport;
+        _mutationRunService = mutationRunService;
         _scanFormatter = scanFormatter;
     }
 
@@ -81,7 +90,17 @@ public sealed class CliApplication
             }
         }
 
-        await error.WriteLineAsync("Only --scan is implemented in this initial slice.");
-        return 1;
+        MutationRunOutcome run = await _mutationRunService.RunAsync(outcome.Arguments);
+        if (!string.IsNullOrEmpty(run.Output))
+        {
+            await output.WriteAsync(run.Output);
+        }
+
+        if (!string.IsNullOrEmpty(run.Error))
+        {
+            await error.WriteAsync(run.Error);
+        }
+
+        return run.ExitCode;
     }
 }
