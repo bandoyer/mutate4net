@@ -1,22 +1,36 @@
+using Mutate4Net.ProjectSystem;
+
 namespace Mutate4Net.Execution;
 
 public sealed class TestCommandFactory
 {
+    private readonly ProjectDiscovery _projectDiscovery;
+
+    public TestCommandFactory()
+        : this(new ProjectDiscovery())
+    {
+    }
+
+    public TestCommandFactory(ProjectDiscovery projectDiscovery)
+    {
+        _projectDiscovery = projectDiscovery;
+    }
+
     public TestCommand Create(string sourceFile, string? customCommand)
     {
-        string workingDirectory = FindProjectDirectory(sourceFile);
+        ProjectInfo? project = _projectDiscovery.Discover(sourceFile);
+        string workingDirectory = project?.ProjectDirectory ?? Path.GetDirectoryName(sourceFile)!;
         if (!string.IsNullOrWhiteSpace(customCommand))
         {
             return new TestCommand(ShellCommand(customCommand), workingDirectory, IsCustom: true, DisplayCommand: customCommand);
         }
 
-        string? project = FindNearestProject(sourceFile);
         if (project is null)
         {
             return new TestCommand(["dotnet", "test", "--no-restore"], workingDirectory);
         }
 
-        return new TestCommand(["dotnet", "test", project, "--no-restore"], workingDirectory);
+        return new TestCommand(["dotnet", "test", project.ProjectFile, "--no-restore"], workingDirectory);
     }
 
     public TestCommand CreateCoverageCommand(string sourceFile, string coverageOutputPrefix)
@@ -27,29 +41,6 @@ public sealed class TestCommandFactory
         command.Add("/p:CoverletOutputFormat=cobertura");
         command.Add($"/p:CoverletOutput={coverageOutputPrefix}");
         return new TestCommand(command, baseline.WorkingDirectory);
-    }
-
-    private static string FindProjectDirectory(string sourceFile)
-    {
-        string? project = FindNearestProject(sourceFile);
-        return project is null ? Path.GetDirectoryName(sourceFile)! : Path.GetDirectoryName(project)!;
-    }
-
-    private static string? FindNearestProject(string sourceFile)
-    {
-        var directory = new DirectoryInfo(Path.GetDirectoryName(sourceFile)!);
-        while (directory is not null)
-        {
-            FileInfo[] projects = directory.GetFiles("*.csproj");
-            if (projects.Length == 1)
-            {
-                return projects[0].FullName;
-            }
-
-            directory = directory.Parent;
-        }
-
-        return null;
     }
 
     private static IReadOnlyList<string> ShellCommand(string command)
