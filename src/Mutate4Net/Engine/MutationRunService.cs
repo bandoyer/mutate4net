@@ -18,7 +18,7 @@ public sealed class MutationRunService
     private readonly ReportFormatter _reportFormatter;
     private readonly DifferentialSelector _selector;
     private readonly LineFilter _lineFilter;
-    private readonly CoverageLoader _coverageLoader;
+    private readonly CoverageRunner _coverageRunner;
     private readonly MutationCoverageFilter _coverageFilter;
     private readonly ExecutionMessages _messages;
 
@@ -31,7 +31,7 @@ public sealed class MutationRunService
             new ReportFormatter(),
             null,
             new LineFilter(),
-            new CoverageLoader(),
+            null,
             new MutationCoverageFilter(),
             new ExecutionMessages())
     {
@@ -45,7 +45,7 @@ public sealed class MutationRunService
         ReportFormatter reportFormatter,
         DifferentialSelector? selector = null,
         LineFilter? lineFilter = null,
-        CoverageLoader? coverageLoader = null,
+        CoverageRunner? coverageRunner = null,
         MutationCoverageFilter? coverageFilter = null,
         ExecutionMessages? messages = null)
     {
@@ -56,7 +56,7 @@ public sealed class MutationRunService
         _reportFormatter = reportFormatter;
         _selector = selector ?? new DifferentialSelector(manifestSupport);
         _lineFilter = lineFilter ?? new LineFilter();
-        _coverageLoader = coverageLoader ?? new CoverageLoader();
+        _coverageRunner = coverageRunner ?? new CoverageRunner(executor, testCommandFactory, new CoverageLoader());
         _coverageFilter = coverageFilter ?? new MutationCoverageFilter();
         _messages = messages ?? new ExecutionMessages();
     }
@@ -67,12 +67,8 @@ public sealed class MutationRunService
         DifferentialSelection differentialSelection = await _selector.SelectAsync(arguments.TargetFile, arguments, analysis);
         IReadOnlyList<MutationSite> selectedSites = _lineFilter.Filter(differentialSelection.Selected, arguments.Lines);
         TestCommand command = _testCommandFactory.Create(arguments.TargetFile, arguments.TestCommand);
-        CommandResult baselineResult = await _executor.RunAsync(command.Command, command.WorkingDirectory, 0);
-        var baseline = new TestRun(
-            baselineResult.ExitCode,
-            baselineResult.Output,
-            baselineResult.DurationMillis,
-            baselineResult.TimedOut);
+        CoverageRun coverageRun = await _coverageRunner.RunBaselineAsync(arguments, command);
+        TestRun baseline = coverageRun.Baseline;
 
         if (!baseline.Passed)
         {
@@ -82,8 +78,7 @@ public sealed class MutationRunService
             return new MutationRunOutcome(2, string.Empty, error);
         }
 
-        CoverageReport coverage = _coverageLoader.Load(arguments, command.WorkingDirectory);
-        CoverageSelection coverageSelection = _coverageFilter.Filter(command.WorkingDirectory, selectedSites, coverage);
+        CoverageSelection coverageSelection = _coverageFilter.Filter(command.WorkingDirectory, selectedSites, coverageRun.Report);
         IReadOnlyList<MutationResult> results = await RunMutantsAsync(
             arguments.TargetFile,
             analysis.Source,

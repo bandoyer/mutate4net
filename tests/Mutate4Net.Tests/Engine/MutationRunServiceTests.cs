@@ -210,7 +210,10 @@ public sealed class MutationRunServiceTests
             new CommandResult(1, "mutant failed", 11, false));
         var service = CreateService(executor);
 
-        MutationRunOutcome outcome = await service.RunAsync(Arguments(sample.Path, reuseCoverage: true));
+        MutationRunOutcome outcome = await service.RunAsync(Arguments(
+            sample.Path,
+            reuseCoverage: true,
+            testCommand: null));
 
         Assert.Equal(0, outcome.ExitCode);
         Assert.Equal(2, executor.RunCount);
@@ -231,7 +234,8 @@ public sealed class MutationRunServiceTests
         string path,
         IReadOnlySet<int>? lines = null,
         bool mutateAll = false,
-        bool reuseCoverage = false) =>
+        bool reuseCoverage = false,
+        string? testCommand = "fake") =>
         new(
             path,
             CliMode.Mutate,
@@ -242,7 +246,7 @@ public sealed class MutationRunServiceTests
             MutationWarning: 50,
             MaxWorkers: 1,
             TimeoutFactor: 10,
-            TestCommand: "fake",
+            TestCommand: testCommand,
             Verbose: false);
 
     private sealed class FakeCommandExecutor : ICommandExecutor

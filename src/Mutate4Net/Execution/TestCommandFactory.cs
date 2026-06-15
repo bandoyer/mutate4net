@@ -19,6 +19,16 @@ public sealed class TestCommandFactory
         return new TestCommand(["dotnet", "test", project, "--no-restore"], workingDirectory);
     }
 
+    public TestCommand CreateCoverageCommand(string sourceFile, string coverageOutputPrefix)
+    {
+        TestCommand baseline = Create(sourceFile, customCommand: null);
+        var command = baseline.Command.ToList();
+        command.Add("/p:CollectCoverage=true");
+        command.Add("/p:CoverletOutputFormat=cobertura");
+        command.Add($"/p:CoverletOutput={coverageOutputPrefix}");
+        return new TestCommand(command, baseline.WorkingDirectory);
+    }
+
     private static string FindProjectDirectory(string sourceFile)
     {
         string? project = FindNearestProject(sourceFile);
@@ -52,4 +62,3 @@ public sealed class TestCommandFactory
         return ["/bin/sh", "-c", command];
     }
 }
-
