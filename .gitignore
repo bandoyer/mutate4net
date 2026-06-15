@@ -4,6 +4,6 @@ obj/
 .idea/
 TestResults/
 .mutate4net/
+artifacts/
 *.user
 *.suo
-
