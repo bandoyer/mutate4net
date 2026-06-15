@@ -128,7 +128,7 @@ public sealed class ProjectDiscoveryTests
         TestCommand command = new TestCommandFactory().Create(source, customCommand: null);
 
         Assert.Equal(workspace.Path("src/App"), command.WorkingDirectory);
-        Assert.Equal(["dotnet", "test", project, "--no-restore"], command.Command);
+        Assert.Equal(["dotnet", "test", project], command.Command);
     }
 
     [Fact]
@@ -146,7 +146,7 @@ public sealed class ProjectDiscoveryTests
         TestCommand command = new TestCommandFactory().Create(source, customCommand: null);
 
         Assert.Equal(workspace.Path(""), command.WorkingDirectory);
-        Assert.Equal(["dotnet", "test", solution, "--no-restore"], command.Command);
+        Assert.Equal(["dotnet", "test", solution], command.Command);
     }
 
     private sealed class ProjectWorkspace : IDisposable

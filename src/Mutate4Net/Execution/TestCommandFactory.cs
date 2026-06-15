@@ -29,11 +29,11 @@ public sealed class TestCommandFactory
 
         if (project is null)
         {
-            return new TestCommand(["dotnet", "test", "--no-restore"], workingDirectory);
+            return new TestCommand(["dotnet", "test"], workingDirectory);
         }
 
         string testTarget = project.SolutionFile ?? project.ProjectFile;
-        return new TestCommand(["dotnet", "test", testTarget, "--no-restore"], workingDirectory);
+        return new TestCommand(["dotnet", "test", testTarget], workingDirectory);
     }
 
     public TestCommand CreateCoverageCommand(string sourceFile, string coverageOutputPrefix)
