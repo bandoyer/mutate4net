@@ -28,6 +28,8 @@ public sealed class MutationRunServiceTests
 
         Assert.Equal(0, outcome.ExitCode);
         Assert.Contains("KILLED", outcome.Output);
+        Assert.Contains("Coverage report available: false", outcome.Output);
+        Assert.Contains("Custom test command supplied; treating all selected mutation sites as covered.", outcome.Output);
         Assert.Contains("Summary: 1 killed, 0 survived, 1 total.", outcome.Output);
         string finalSource = await File.ReadAllTextAsync(sample.Path);
         Assert.Contains("bool Flag() => true;", finalSource);
@@ -274,6 +276,8 @@ public sealed class MutationRunServiceTests
         Assert.Equal(2, executor.RunCount);
         Assert.Contains("UNCOVERED", outcome.Output);
         Assert.Contains("Uncovered mutation sites: 1", outcome.Output);
+        Assert.Contains("Coverage reused: true", outcome.Output);
+        Assert.Contains("Coverage report available: true", outcome.Output);
         Assert.Contains("Summary: 1 killed, 0 survived, 1 total.", outcome.Output);
     }
 

@@ -9,6 +9,7 @@ public sealed class ExecutionMessages
     public string ExtraText(
         CliArguments arguments,
         DifferentialSelection differentialSelection,
+        CoverageRun coverageRun,
         int coveredMutationSites,
         int uncoveredMutationSites)
     {
@@ -23,10 +24,24 @@ public sealed class ExecutionMessages
         extra.Append("Manifest-violating surface area: ")
             .Append(differentialSelection.ManifestViolatingSurfaceArea)
             .Append('\n');
+        extra.Append("Coverage reused: ").Append(coverageRun.ReusedCoverage.ToString().ToLowerInvariant()).Append('\n');
+        extra.Append("Coverage report available: ").Append(coverageRun.ReportAvailable.ToString().ToLowerInvariant()).Append('\n');
 
         if (differentialSelection.UnchangedModule)
         {
             extra.Append("No mutations need testing.\n");
+        }
+
+        if (!coverageRun.ReportAvailable)
+        {
+            if (!string.IsNullOrWhiteSpace(arguments.TestCommand))
+            {
+                extra.Append("Custom test command supplied; treating all selected mutation sites as covered.\n");
+            }
+            else
+            {
+                extra.Append("Coverage report unavailable; treating all selected mutation sites as covered.\n");
+            }
         }
 
         if (coveredMutationSites > arguments.MutationWarning)

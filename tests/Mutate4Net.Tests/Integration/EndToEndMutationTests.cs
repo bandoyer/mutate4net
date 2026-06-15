@@ -69,6 +69,7 @@ public sealed class EndToEndMutationTests
         Assert.Equal(0, exitCode);
         Assert.Equal(string.Empty, error.ToString());
         Assert.Contains("KILLED", output.ToString());
+        Assert.Contains("Coverage report available: true", output.ToString());
         Assert.Contains("Summary: 2 killed, 0 survived, 2 total.", output.ToString());
         Assert.Contains("mutate4net-manifest", await File.ReadAllTextAsync(sourceFile));
     }
