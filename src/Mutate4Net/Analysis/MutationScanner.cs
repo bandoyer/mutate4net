@@ -82,6 +82,38 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         base.VisitPrefixUnaryExpression(node);
     }
 
+    public override void VisitRelationalPattern(RelationalPatternSyntax node)
+    {
+        (string Original, string Replacement)? op = RelationalPatternOperatorFor(node.OperatorToken.Kind());
+        if (op is not null)
+        {
+            AddSite(
+                node,
+                node.OperatorToken.Span,
+                op.Value.Original,
+                op.Value.Replacement,
+                $"replace {op.Value.Original} with {op.Value.Replacement}");
+        }
+
+        base.VisitRelationalPattern(node);
+    }
+
+    public override void VisitBinaryPattern(BinaryPatternSyntax node)
+    {
+        (string Original, string Replacement)? op = BinaryPatternOperatorFor(node.Kind());
+        if (op is not null)
+        {
+            AddSite(
+                node,
+                node.OperatorToken.Span,
+                op.Value.Original,
+                op.Value.Replacement,
+                $"replace {op.Value.Original} with {op.Value.Replacement}");
+        }
+
+        base.VisitBinaryPattern(node);
+    }
+
     public override void VisitReturnStatement(ReturnStatementSyntax node)
     {
         AddNullReplacement(node.Expression);
@@ -256,6 +288,22 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         SyntaxKind.GreaterThanOrEqualExpression => (">=", ">", false),
         SyntaxKind.LessThanExpression => ("<", "<=", false),
         SyntaxKind.LessThanOrEqualExpression => ("<=", "<", false),
+        _ => null
+    };
+
+    private static (string Original, string Replacement)? RelationalPatternOperatorFor(SyntaxKind kind) => kind switch
+    {
+        SyntaxKind.GreaterThanToken => (">", ">="),
+        SyntaxKind.GreaterThanEqualsToken => (">=", ">"),
+        SyntaxKind.LessThanToken => ("<", "<="),
+        SyntaxKind.LessThanEqualsToken => ("<=", "<"),
+        _ => null
+    };
+
+    private static (string Original, string Replacement)? BinaryPatternOperatorFor(SyntaxKind kind) => kind switch
+    {
+        SyntaxKind.AndPattern => ("and", "or"),
+        SyntaxKind.OrPattern => ("or", "and"),
         _ => null
     };
 

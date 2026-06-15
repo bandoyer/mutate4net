@@ -58,6 +58,27 @@ public sealed class MutationCatalogTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_DiscoversPatternOperators()
+    {
+        const string source = """
+            class Sample
+            {
+                bool IsPermanent(int statusCode)
+                {
+                    return statusCode is >= 500 and < 600;
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.Contains(analysis.Sites, site => site.Description == "replace >= with >");
+        Assert.Contains(analysis.Sites, site => site.Description == "replace and with or");
+        Assert.Contains(analysis.Sites, site => site.Description == "replace < with <=");
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_StripsEmbeddedManifestBeforeScanning()
     {
         const string source = """
@@ -79,4 +100,3 @@ public sealed class MutationCatalogTests
         Assert.Equal("replace true with false", analysis.Sites[0].Description);
     }
 }
-
