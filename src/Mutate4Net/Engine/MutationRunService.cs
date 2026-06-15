@@ -71,8 +71,9 @@ public sealed class MutationRunService
         SourceAnalysis analysis = await _catalog.AnalyzeAsync(arguments.TargetFile);
         DifferentialSelection differentialSelection = await _selector.SelectAsync(arguments.TargetFile, arguments, analysis);
         IReadOnlyList<MutationSite> selectedSites = _lineFilter.Filter(differentialSelection.Selected, arguments.Lines);
-        TestCommand command = _testCommandFactory.Create(arguments.TargetFile, arguments.TestCommand);
-        CoverageRun coverageRun = await _coverageRunner.RunBaselineAsync(arguments, command);
+        TestCommand command = _testCommandFactory.Create(arguments);
+        CliArguments runArguments = NormalizeTestProjectSelectors(arguments, command.WorkingDirectory);
+        CoverageRun coverageRun = await _coverageRunner.RunBaselineAsync(runArguments, command);
         TestRun baseline = coverageRun.Baseline;
 
         if (!baseline.Passed)
@@ -89,7 +90,7 @@ public sealed class MutationRunService
             command.WorkingDirectory,
             analysis.Source,
             coverageSelection.Covered,
-            command,
+            runArguments,
             TimeoutMillis(baseline.DurationMillis, arguments.TimeoutFactor),
             arguments.MaxWorkers);
 
@@ -121,7 +122,7 @@ public sealed class MutationRunService
         string moduleRoot,
         string originalSource,
         IReadOnlyList<MutationSite> sites,
-        TestCommand command,
+        CliArguments arguments,
         long timeoutMillis,
         int maxWorkers)
     {
@@ -140,7 +141,7 @@ public sealed class MutationRunService
                 .Select((site, index) => RunMutantAsync(
                     originalSource,
                     site,
-                    command,
+                    arguments,
                     timeoutMillis,
                     index + 1,
                     sites.Count,
@@ -160,7 +161,7 @@ public sealed class MutationRunService
     private async Task<MutationResult> RunMutantAsync(
         string originalSource,
         MutationSite site,
-        TestCommand command,
+        CliArguments arguments,
         long timeoutMillis,
         int order,
         int totalJobs,
@@ -176,10 +177,11 @@ public sealed class MutationRunService
 
         try
         {
-            TestCommand workerCommand = _testCommandFactory.Create(workspace.SourceFile, command.IsCustom ? command.DisplayCommand : null);
+            CliArguments workerArguments = arguments with { TargetFile = workspace.SourceFile };
+            TestCommand workerCommand = _testCommandFactory.Create(workerArguments);
             string mutated = originalSource[..site.Start] + site.Replacement + originalSource[site.End..];
             await File.WriteAllTextAsync(workspace.SourceFile, mutated);
-            CommandResult result = await _executor.RunAsync(workerCommand.Command, workerCommand.WorkingDirectory, timeoutMillis);
+            CommandResult result = await TestCommandRunner.RunAsync(_executor, workerCommand, timeoutMillis);
             return new MutationResult(
                 site,
                 result.ExitCode != 0 || result.TimedOut,
@@ -204,4 +206,34 @@ public sealed class MutationRunService
 
     private static long TimeoutMillis(long baselineDurationMillis, int timeoutFactor) =>
         Math.Max(1_000, baselineDurationMillis * timeoutFactor);
+
+    private static CliArguments NormalizeTestProjectSelectors(CliArguments arguments, string workingDirectory) =>
+        arguments with
+        {
+            TestProjects = NormalizeSelectors(arguments.TestProjects, workingDirectory),
+            ExcludedTestProjects = NormalizeSelectors(arguments.ExcludedTestProjects, workingDirectory)
+        };
+
+    private static IReadOnlyList<string> NormalizeSelectors(IReadOnlyList<string> selectors, string workingDirectory) =>
+        selectors.Select(selector => NormalizeSelector(selector, workingDirectory)).ToArray();
+
+    private static string NormalizeSelector(string selector, string workingDirectory)
+    {
+        if (!Path.IsPathRooted(selector))
+        {
+            return selector;
+        }
+
+        string fullSelector = Path.GetFullPath(selector);
+        string fullWorkingDirectory = Path.GetFullPath(workingDirectory);
+        string relative = Path.GetRelativePath(fullWorkingDirectory, fullSelector);
+        bool outsideWorkingDirectory =
+            relative == ".." ||
+            relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) ||
+            relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal) ||
+            Path.IsPathRooted(relative);
+        return outsideWorkingDirectory
+            ? selector
+            : relative;
+    }
 }

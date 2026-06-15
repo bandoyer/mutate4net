@@ -18,6 +18,22 @@ public sealed class CoverageReport
 
     public static CoverageReport AllCovered() => new(new HashSet<CoverageSite>(), treatAllAsCovered: true);
 
+    public static CoverageReport Combine(IEnumerable<CoverageReport> reports)
+    {
+        var coveredLines = new HashSet<CoverageSite>();
+        foreach (CoverageReport report in reports)
+        {
+            if (report._treatAllAsCovered)
+            {
+                return AllCovered();
+            }
+
+            coveredLines.UnionWith(report._coveredLines);
+        }
+
+        return new CoverageReport(coveredLines);
+    }
+
     public bool Covers(string sourcePath, int lineNumber)
     {
         if (_treatAllAsCovered)
@@ -36,4 +52,3 @@ public sealed class CoverageReport
     public static string NormalizePath(string path) =>
         path.Replace('\\', '/').TrimStart('/');
 }
-

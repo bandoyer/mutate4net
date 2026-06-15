@@ -21,6 +21,8 @@ public sealed class CliArgumentsParser
         int maxWorkers = Math.Max(1, Environment.ProcessorCount / 2);
         int timeoutFactor = 10;
         string? testCommand = null;
+        var testProjects = new List<string>();
+        var excludedTestProjects = new List<string>();
 
         for (int i = 0; i < args.Count; i++)
         {
@@ -95,6 +97,32 @@ public sealed class CliArgumentsParser
                     }
 
                     break;
+                case "--test-project":
+                    if (!TryReadValue(args, ref i, arg, out string? testProject, out ParseOutcome? testProjectError))
+                    {
+                        return testProjectError!;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(testProject))
+                    {
+                        return ParseOutcome.Error("--test-project requires a non-empty value.");
+                    }
+
+                    testProjects.Add(testProject);
+                    break;
+                case "--exclude-test-project":
+                    if (!TryReadValue(args, ref i, arg, out string? excludedTestProject, out ParseOutcome? excludedTestProjectError))
+                    {
+                        return excludedTestProjectError!;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(excludedTestProject))
+                    {
+                        return ParseOutcome.Error("--exclude-test-project requires a non-empty value.");
+                    }
+
+                    excludedTestProjects.Add(excludedTestProject);
+                    break;
                 default:
                     if (arg.StartsWith("--", StringComparison.Ordinal))
                     {
@@ -127,7 +155,16 @@ public sealed class CliArgumentsParser
             return ParseOutcome.Error($"Target file does not exist: {target}");
         }
 
-        string? conflict = FindConflict(scan, updateManifest, reuseCoverage, lines.Count > 0, sinceLastRun, mutateAll);
+        string? conflict = FindConflict(
+            scan,
+            updateManifest,
+            reuseCoverage,
+            lines.Count > 0,
+            sinceLastRun,
+            mutateAll,
+            !string.IsNullOrWhiteSpace(testCommand),
+            testProjects.Count > 0,
+            excludedTestProjects.Count > 0);
         if (conflict is not null)
         {
             return ParseOutcome.Error(conflict);
@@ -145,7 +182,9 @@ public sealed class CliArgumentsParser
             maxWorkers,
             timeoutFactor,
             testCommand,
-            verbose);
+            verbose,
+            testProjects,
+            excludedTestProjects);
 
         return ParseOutcome.Success(parsed);
     }
@@ -221,7 +260,10 @@ public sealed class CliArgumentsParser
         bool reuseCoverage,
         bool hasLines,
         bool sinceLastRun,
-        bool mutateAll)
+        bool mutateAll,
+        bool hasTestCommand,
+        bool hasTestProjects,
+        bool hasExcludedTestProjects)
     {
         if (scan && updateManifest)
         {
@@ -241,6 +283,11 @@ public sealed class CliArgumentsParser
         if (scan && reuseCoverage)
         {
             return "--scan may not be combined with --reuse-coverage.";
+        }
+
+        if (scan && (hasTestProjects || hasExcludedTestProjects))
+        {
+            return "--scan may not be combined with test project selection.";
         }
 
         if (hasLines && sinceLastRun)
@@ -276,6 +323,16 @@ public sealed class CliArgumentsParser
         if (updateManifest && reuseCoverage)
         {
             return "--update-manifest may not be combined with --reuse-coverage.";
+        }
+
+        if (updateManifest && (hasTestProjects || hasExcludedTestProjects))
+        {
+            return "--update-manifest may not be combined with test project selection.";
+        }
+
+        if (hasTestCommand && (hasTestProjects || hasExcludedTestProjects))
+        {
+            return "--test-command may not be combined with test project selection.";
         }
 
         return null;

@@ -338,7 +338,9 @@ public sealed class MutationRunServiceTests
             MaxWorkers: maxWorkers,
             TimeoutFactor: 10,
             TestCommand: testCommand,
-            Verbose: false);
+            Verbose: false,
+            TestProjects: [],
+            ExcludedTestProjects: []);
 
     private sealed class FakeCommandExecutor : ICommandExecutor
     {

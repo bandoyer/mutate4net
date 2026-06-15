@@ -11,5 +11,6 @@ public sealed record CliArguments(
     int MaxWorkers,
     int TimeoutFactor,
     string? TestCommand,
-    bool Verbose);
-
+    bool Verbose,
+    IReadOnlyList<string> TestProjects,
+    IReadOnlyList<string> ExcludedTestProjects);

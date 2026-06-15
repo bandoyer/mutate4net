@@ -20,6 +20,8 @@ public static class UsageText
           --max-workers N           Limit parallel isolated workers.
           --timeout-factor N        Multiply baseline duration for mutant timeout.
           --test-command CMD        Override the default dotnet test command.
+          --test-project PATH       Test project to run; repeat for multiple projects.
+          --exclude-test-project ID Exclude discovered test project by path or name.
           --verbose                 Print live worker progress.
           --help                    Show this help text.
           --version                 Show the mutate4net version.

@@ -149,6 +149,85 @@ public sealed class ProjectDiscoveryTests
         Assert.Equal(["dotnet", "test", solution], command.Command);
     }
 
+    [Fact]
+    public void DiscoverTestProjects_FindsSdkTestProjectsOutsideExcludedDirectories()
+    {
+        using var workspace = ProjectWorkspace.Create();
+        string unit = workspace.Write("tests/App.Unit/App.Unit.csproj", TestProjectXml());
+        string functional = workspace.Write("tests/App.Functional/App.Functional.csproj", TestProjectXml());
+        workspace.Write("tests/App.Browser/bin/Debug/App.Browser.csproj", TestProjectXml());
+        workspace.Write("src/App/App.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+
+        IReadOnlyList<string> projects = new ProjectDiscovery().DiscoverTestProjects(workspace.Path(""));
+
+        Assert.Equal([functional, unit], projects);
+    }
+
+    [Fact]
+    public void TestCommandFactory_ExcludesDiscoveredTestProjectByName()
+    {
+        using var workspace = ProjectWorkspace.Create();
+        workspace.Write("App.sln", string.Empty);
+        workspace.Write("src/App/App.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        string unit = workspace.Write("tests/App.Unit/App.Unit.csproj", TestProjectXml());
+        string functional = workspace.Write("tests/App.Functional/App.Functional.csproj", TestProjectXml());
+        workspace.Write("tests/App.Browser/App.Browser.csproj", TestProjectXml());
+        string source = workspace.Write("src/App/Calculator.cs", "class Calculator { }");
+
+        TestCommand command = new TestCommandFactory().Create(
+            source,
+            customCommand: null,
+            testProjects: [],
+            excludedTestProjects: ["App.Browser"]);
+
+        Assert.Equal(workspace.Path(""), command.WorkingDirectory);
+        Assert.Equal(2, command.Commands.Count);
+        Assert.Contains(command.Commands, candidate => candidate.SequenceEqual(["dotnet", "test", functional]));
+        Assert.Contains(command.Commands, candidate => candidate.SequenceEqual(["dotnet", "test", unit]));
+    }
+
+    [Fact]
+    public void TestCommandFactory_UsesExplicitTestProjects()
+    {
+        using var workspace = ProjectWorkspace.Create();
+        workspace.Write("App.sln", string.Empty);
+        workspace.Write("src/App/App.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        string unit = workspace.Write("tests/App.Unit/App.Unit.csproj", TestProjectXml());
+        workspace.Write("tests/App.Browser/App.Browser.csproj", TestProjectXml());
+        string source = workspace.Write("src/App/Calculator.cs", "class Calculator { }");
+
+        TestCommand command = new TestCommandFactory().Create(
+            source,
+            customCommand: null,
+            testProjects: ["tests/App.Unit/App.Unit.csproj"],
+            excludedTestProjects: []);
+
+        Assert.Single(command.Commands);
+        Assert.Equal(["dotnet", "test", unit], command.Command);
+    }
+
+    private static string TestProjectXml() =>
+        """
+        <Project Sdk="Microsoft.NET.Sdk">
+          <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+          <ItemGroup>
+            <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+          </ItemGroup>
+        </Project>
+        """;
+
     private sealed class ProjectWorkspace : IDisposable
     {
         private readonly string _root;

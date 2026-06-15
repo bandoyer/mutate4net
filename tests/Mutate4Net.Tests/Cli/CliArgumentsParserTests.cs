@@ -53,4 +53,44 @@ public sealed class CliArgumentsParserTests
         Assert.Equal(3, outcome.Arguments.MaxWorkers);
         Assert.Equal(System.IO.Path.GetFullPath(sample.Path), outcome.Arguments.TargetFile);
     }
+
+    [Fact]
+    public void Parse_ReadsTestProjectSelection()
+    {
+        using var sample = SampleFile.Create("class Sample { }");
+
+        ParseOutcome outcome = new CliArgumentsParser().Parse([
+            sample.Path,
+            "--test-project",
+            "tests/App.Unit/App.Unit.csproj",
+            "--test-project",
+            "tests/App.Functional/App.Functional.csproj",
+            "--exclude-test-project",
+            "App.Browser"
+        ]);
+
+        Assert.True(outcome.IsSuccess);
+        Assert.NotNull(outcome.Arguments);
+        Assert.Equal(
+            ["tests/App.Unit/App.Unit.csproj", "tests/App.Functional/App.Functional.csproj"],
+            outcome.Arguments.TestProjects);
+        Assert.Equal(["App.Browser"], outcome.Arguments.ExcludedTestProjects);
+    }
+
+    [Fact]
+    public void Parse_RejectsTestCommandWithTestProjectSelection()
+    {
+        using var sample = SampleFile.Create("class Sample { }");
+
+        ParseOutcome outcome = new CliArgumentsParser().Parse([
+            sample.Path,
+            "--test-command",
+            "dotnet test",
+            "--test-project",
+            "tests/App.Unit/App.Unit.csproj"
+        ]);
+
+        Assert.False(outcome.IsSuccess);
+        Assert.Contains("--test-command may not be combined", outcome.ErrorMessage);
+    }
 }

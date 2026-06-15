@@ -33,6 +33,15 @@ public sealed class CoverageLoader
     public CoverageReport LoadPathOrAllCovered(string coveragePath) =>
         File.Exists(coveragePath) ? _parser.Parse(coveragePath) : CoverageReport.AllCovered();
 
+    public CoverageReport LoadPathsOrAllCovered(IEnumerable<string> coveragePaths)
+    {
+        CoverageReport[] reports = coveragePaths
+            .Where(File.Exists)
+            .Select(_parser.Parse)
+            .ToArray();
+        return reports.Length == 0 ? CoverageReport.AllCovered() : CoverageReport.Combine(reports);
+    }
+
     public static string DefaultCoverageDirectory(string moduleRoot) =>
         Path.Combine(moduleRoot, ".mutate4net", "coverage");
 

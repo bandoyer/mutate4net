@@ -53,6 +53,17 @@ public sealed class ProjectDiscovery
         return match;
     }
 
+    public IReadOnlyList<string> DiscoverTestProjects(string moduleRoot)
+    {
+        string fullRoot = Path.GetFullPath(moduleRoot);
+        return Directory.EnumerateFiles(fullRoot, "*.csproj", SearchOption.AllDirectories)
+            .Where(project => !IsUnderDefaultExcludedDirectory(
+                NormalizePath(Path.GetRelativePath(fullRoot, Path.GetDirectoryName(project)!))))
+            .Where(IsTestProject)
+            .OrderBy(project => project, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     private static IEnumerable<ProjectInfo> CandidateProjects(string sourceFile)
     {
         var directory = new DirectoryInfo(Path.GetDirectoryName(sourceFile)!);
