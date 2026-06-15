@@ -64,7 +64,7 @@ public sealed class CliApplication
         {
             try
             {
-                var analysis = await _catalog.AnalyzeAsync(outcome.Arguments.TargetFile);
+                var analysis = await _catalog.AnalyzeAsync(outcome.Arguments.TargetFile, outcome.Arguments.ProjectFile);
                 var changedScopes = await _manifestSupport.FindChangedScopesAsync(outcome.Arguments.TargetFile, analysis);
                 await output.WriteAsync(_scanFormatter.Format(
                     analysis,
@@ -83,7 +83,7 @@ public sealed class CliApplication
         {
             try
             {
-                var analysis = await _catalog.AnalyzeAsync(outcome.Arguments.TargetFile);
+                var analysis = await _catalog.AnalyzeAsync(outcome.Arguments.TargetFile, outcome.Arguments.ProjectFile);
                 await _manifestSupport.WriteAsync(
                     outcome.Arguments.TargetFile,
                     analysis.Source,

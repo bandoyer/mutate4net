@@ -12,6 +12,7 @@ Implemented:
 - Embedded `mutate4net-manifest` read/write.
 - Differential selection from the embedded manifest.
 - Line filtering with `--lines`.
+- Project-aware Roslyn analysis for SDK-style project sources and project references.
 - Baseline `dotnet test` execution.
 - Cobertura coverage parsing and filtering.
 - Coverlet-based coverage generation for default `dotnet test` runs.
@@ -21,7 +22,7 @@ Implemented:
 
 Still maturing:
 
-- Project discovery is conservative and currently fails when multiple projects include the same source file.
+- Project discovery is conservative unless `--project` is supplied for ambiguous ownership.
 - Coverage generation is still conservative and falls back to all-covered behavior when no Coverlet report can be produced.
 - Integration test coverage is still small.
 - Reporting and package polish are minimal.

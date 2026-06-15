@@ -68,7 +68,7 @@ public sealed class MutationRunService
 
     public async Task<MutationRunOutcome> RunAsync(CliArguments arguments)
     {
-        SourceAnalysis analysis = await _catalog.AnalyzeAsync(arguments.TargetFile);
+        SourceAnalysis analysis = await _catalog.AnalyzeAsync(arguments.TargetFile, arguments.ProjectFile);
         DifferentialSelection differentialSelection = await _selector.SelectAsync(arguments.TargetFile, arguments, analysis);
         IReadOnlyList<MutationSite> selectedSites = _lineFilter.Filter(differentialSelection.Selected, arguments.Lines);
         TestCommand command = _testCommandFactory.Create(arguments);
