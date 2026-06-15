@@ -68,7 +68,8 @@ public sealed class CliApplication
                 var changedScopes = await _manifestSupport.FindChangedScopesAsync(outcome.Arguments.TargetFile, analysis);
                 await output.WriteAsync(_scanFormatter.Format(
                     analysis,
-                    changedScopes.ManifestPresent ? changedScopes.AllScopeIds() : null));
+                    changedScopes.ManifestPresent ? changedScopes.AllScopeIds() : null,
+                    outcome.Arguments.Lines));
                 return 0;
             }
             catch (Exception ex)

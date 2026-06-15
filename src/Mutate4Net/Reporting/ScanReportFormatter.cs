@@ -5,12 +5,19 @@ namespace Mutate4Net.Reporting;
 
 public sealed class ScanReportFormatter
 {
-    public string Format(SourceAnalysis analysis, IReadOnlySet<string>? changedScopes = null)
+    public string Format(
+        SourceAnalysis analysis,
+        IReadOnlySet<string>? changedScopes = null,
+        IReadOnlySet<int>? lines = null)
     {
+        MutationSite[] sites = analysis.Sites
+            .Where(site => lines is null || lines.Count == 0 || lines.Contains(site.Line))
+            .OrderBy(site => site.Start)
+            .ToArray();
         var builder = new StringBuilder();
-        builder.AppendLine($"Scan: {analysis.Sites.Count} mutation sites in {analysis.FilePath}");
+        builder.AppendLine($"Scan: {sites.Length} mutation sites in {analysis.FilePath}");
 
-        foreach (MutationSite site in analysis.Sites.OrderBy(site => site.Start))
+        foreach (MutationSite site in sites)
         {
             string marker = changedScopes is not null && changedScopes.Contains(site.ScopeId) ? "*" : " ";
             builder.AppendLine($"{marker} {site.File}:{site.Line} {site.Description}");
@@ -24,4 +31,3 @@ public sealed class ScanReportFormatter
         return builder.ToString();
     }
 }
-

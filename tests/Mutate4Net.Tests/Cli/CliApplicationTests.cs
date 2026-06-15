@@ -62,6 +62,28 @@ public sealed class CliApplicationTests
     }
 
     [Fact]
+    public async Task RunAsync_Scan_RespectsLineSelection()
+    {
+        using var sample = SampleFile.Create("""
+            class Sample
+            {
+                bool First() => true;
+                bool Second() => false;
+            }
+            """);
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await new CliApplication().RunAsync([sample.Path, "--scan", "--lines", "3"], output, error);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Scan: 1 mutation sites", output.ToString());
+        Assert.Contains("replace true with false", output.ToString());
+        Assert.DoesNotContain("replace false with true", output.ToString());
+        Assert.Equal(string.Empty, error.ToString());
+    }
+
+    [Fact]
     public async Task RunAsync_Mutate_ReturnsCliErrorForTestProjectTarget()
     {
         using var workspace = CliWorkspace.Create();
