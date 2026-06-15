@@ -32,6 +32,11 @@ public sealed class ExecutionMessages
             extra.Append("Selected test projects: ").Append(string.Join(", ", arguments.TestProjects)).Append('\n');
         }
 
+        if (!string.IsNullOrWhiteSpace(arguments.TestFilter))
+        {
+            extra.Append("Test filter: ").Append(arguments.TestFilter).Append('\n');
+        }
+
         if (arguments.ExcludedTestProjects.Count > 0)
         {
             extra.Append("Excluded test projects: ").Append(string.Join(", ", arguments.ExcludedTestProjects)).Append('\n');

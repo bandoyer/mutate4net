@@ -12,6 +12,7 @@ public sealed record CliArguments(
     int TimeoutFactor,
     string? ProjectFile,
     string? TestCommand,
+    string? TestFilter,
     bool Verbose,
     IReadOnlyList<string> TestProjects,
     IReadOnlyList<string> ExcludedTestProjects);

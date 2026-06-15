@@ -23,7 +23,8 @@ public sealed class TestCommandFactory
             arguments.ProjectFile,
             arguments.TestCommand,
             arguments.TestProjects,
-            arguments.ExcludedTestProjects);
+            arguments.ExcludedTestProjects,
+            arguments.TestFilter);
 
     public TestCommand Create(string sourceFile, string? customCommand)
     {
@@ -34,9 +35,10 @@ public sealed class TestCommandFactory
         string sourceFile,
         string? customCommand,
         IReadOnlyList<string> testProjects,
-        IReadOnlyList<string> excludedTestProjects)
+        IReadOnlyList<string> excludedTestProjects,
+        string? testFilter = null)
     {
-        return Create(sourceFile, projectFile: null, customCommand, testProjects, excludedTestProjects);
+        return Create(sourceFile, projectFile: null, customCommand, testProjects, excludedTestProjects, testFilter);
     }
 
     public TestCommand Create(
@@ -44,7 +46,8 @@ public sealed class TestCommandFactory
         string? projectFile,
         string? customCommand,
         IReadOnlyList<string> testProjects,
-        IReadOnlyList<string> excludedTestProjects)
+        IReadOnlyList<string> excludedTestProjects,
+        string? testFilter = null)
     {
         ProjectInfo? project = _projectDiscovery.Discover(sourceFile, projectFile);
         string workingDirectory = project is null
@@ -62,17 +65,17 @@ public sealed class TestCommandFactory
         if (selectedTestProjects.Count > 0)
         {
             return new TestCommand(
-                selectedTestProjects.Select(testProject => (IReadOnlyList<string>)["dotnet", "test", testProject]).ToArray(),
+                selectedTestProjects.Select(testProject => DotNetTestCommand(testProject, testFilter)).ToArray(),
                 workingDirectory);
         }
 
         if (project is null)
         {
-            return new TestCommand(["dotnet", "test"], workingDirectory);
+            return new TestCommand(DotNetTestCommand(testTarget: null, testFilter), workingDirectory);
         }
 
         string testTarget = project.SolutionFile ?? project.ProjectFile;
-        return new TestCommand(["dotnet", "test", testTarget], workingDirectory);
+        return new TestCommand(DotNetTestCommand(testTarget, testFilter), workingDirectory);
     }
 
     public TestCommand CreateCoverageCommand(CliArguments arguments, string coverageOutputPrefix)
@@ -82,7 +85,8 @@ public sealed class TestCommandFactory
             arguments.ProjectFile,
             customCommand: null,
             arguments.TestProjects,
-            arguments.ExcludedTestProjects);
+            arguments.ExcludedTestProjects,
+            arguments.TestFilter);
         int commandCount = baseline.Commands.Count;
         IReadOnlyList<IReadOnlyList<string>> commands = baseline.Commands
             .Select((command, index) =>
@@ -104,7 +108,8 @@ public sealed class TestCommandFactory
             arguments.ProjectFile,
             customCommand: null,
             arguments.TestProjects,
-            arguments.ExcludedTestProjects);
+            arguments.ExcludedTestProjects,
+            arguments.TestFilter);
         IReadOnlyList<IReadOnlyList<string>> commands = baseline.Commands
             .Select(command =>
             {
@@ -178,6 +183,23 @@ public sealed class TestCommandFactory
         }
 
         return ["/bin/sh", "-c", command];
+    }
+
+    private static IReadOnlyList<string> DotNetTestCommand(string? testTarget, string? testFilter)
+    {
+        var command = new List<string> { "dotnet", "test" };
+        if (!string.IsNullOrWhiteSpace(testTarget))
+        {
+            command.Add(testTarget);
+        }
+
+        if (!string.IsNullOrWhiteSpace(testFilter))
+        {
+            command.Add("--filter");
+            command.Add(testFilter);
+        }
+
+        return command;
     }
 
     private static string WorkingDirectory(ProjectInfo project) =>

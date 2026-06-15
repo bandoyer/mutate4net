@@ -22,6 +22,7 @@ public sealed class CliArgumentsParser
         int timeoutFactor = 10;
         string? projectFile = null;
         string? testCommand = null;
+        string? testFilter = null;
         var testProjects = new List<string>();
         var excludedTestProjects = new List<string>();
 
@@ -110,6 +111,18 @@ public sealed class CliArgumentsParser
                     }
 
                     break;
+                case "--test-filter":
+                    if (!TryReadValue(args, ref i, arg, out testFilter, out ParseOutcome? filterError))
+                    {
+                        return filterError!;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(testFilter))
+                    {
+                        return ParseOutcome.Error("--test-filter requires a non-empty value.");
+                    }
+
+                    break;
                 case "--test-project":
                     if (!TryReadValue(args, ref i, arg, out string? testProject, out ParseOutcome? testProjectError))
                     {
@@ -190,6 +203,7 @@ public sealed class CliArgumentsParser
             sinceLastRun,
             mutateAll,
             !string.IsNullOrWhiteSpace(testCommand),
+            !string.IsNullOrWhiteSpace(testFilter),
             testProjects.Count > 0,
             excludedTestProjects.Count > 0);
         if (conflict is not null)
@@ -210,6 +224,7 @@ public sealed class CliArgumentsParser
             timeoutFactor,
             projectFile,
             testCommand,
+            testFilter,
             verbose,
             testProjects,
             excludedTestProjects);
@@ -290,6 +305,7 @@ public sealed class CliArgumentsParser
         bool sinceLastRun,
         bool mutateAll,
         bool hasTestCommand,
+        bool hasTestFilter,
         bool hasTestProjects,
         bool hasExcludedTestProjects)
     {
@@ -316,6 +332,11 @@ public sealed class CliArgumentsParser
         if (scan && (hasTestProjects || hasExcludedTestProjects))
         {
             return "--scan may not be combined with test project selection.";
+        }
+
+        if (scan && hasTestFilter)
+        {
+            return "--scan may not be combined with --test-filter.";
         }
 
         if (hasLines && sinceLastRun)
@@ -358,9 +379,19 @@ public sealed class CliArgumentsParser
             return "--update-manifest may not be combined with test project selection.";
         }
 
+        if (updateManifest && hasTestFilter)
+        {
+            return "--update-manifest may not be combined with --test-filter.";
+        }
+
         if (hasTestCommand && (hasTestProjects || hasExcludedTestProjects))
         {
             return "--test-command may not be combined with test project selection.";
+        }
+
+        if (hasTestCommand && hasTestFilter)
+        {
+            return "--test-command may not be combined with --test-filter.";
         }
 
         return null;

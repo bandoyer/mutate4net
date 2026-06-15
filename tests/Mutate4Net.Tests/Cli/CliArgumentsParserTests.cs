@@ -78,6 +78,22 @@ public sealed class CliArgumentsParserTests
     }
 
     [Fact]
+    public void Parse_ReadsTestFilter()
+    {
+        using var sample = SampleFile.Create("class Sample { }");
+
+        ParseOutcome outcome = new CliArgumentsParser().Parse([
+            sample.Path,
+            "--test-filter",
+            "FullyQualifiedName~CalculatorTests"
+        ]);
+
+        Assert.True(outcome.IsSuccess);
+        Assert.NotNull(outcome.Arguments);
+        Assert.Equal("FullyQualifiedName~CalculatorTests", outcome.Arguments.TestFilter);
+    }
+
+    [Fact]
     public void Parse_ReadsExplicitProject()
     {
         using var sample = SampleFile.Create("class Sample { }");
@@ -121,5 +137,38 @@ public sealed class CliArgumentsParserTests
 
         Assert.False(outcome.IsSuccess);
         Assert.Contains("--test-command may not be combined", outcome.ErrorMessage);
+    }
+
+    [Fact]
+    public void Parse_RejectsTestCommandWithTestFilter()
+    {
+        using var sample = SampleFile.Create("class Sample { }");
+
+        ParseOutcome outcome = new CliArgumentsParser().Parse([
+            sample.Path,
+            "--test-command",
+            "dotnet test --filter FullyQualifiedName~CalculatorTests",
+            "--test-filter",
+            "FullyQualifiedName~CalculatorTests"
+        ]);
+
+        Assert.False(outcome.IsSuccess);
+        Assert.Contains("--test-command may not be combined with --test-filter", outcome.ErrorMessage);
+    }
+
+    [Fact]
+    public void Parse_RejectsScanWithTestFilter()
+    {
+        using var sample = SampleFile.Create("class Sample { }");
+
+        ParseOutcome outcome = new CliArgumentsParser().Parse([
+            sample.Path,
+            "--scan",
+            "--test-filter",
+            "FullyQualifiedName~CalculatorTests"
+        ]);
+
+        Assert.False(outcome.IsSuccess);
+        Assert.Contains("--scan may not be combined with --test-filter", outcome.ErrorMessage);
     }
 }

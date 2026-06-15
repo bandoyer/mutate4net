@@ -409,6 +409,7 @@ public sealed class MutationRunServiceTests
             TimeoutFactor: 10,
             ProjectFile: projectFile,
             TestCommand: testCommand,
+            TestFilter: null,
             Verbose: false,
             TestProjects: [],
             ExcludedTestProjects: []);

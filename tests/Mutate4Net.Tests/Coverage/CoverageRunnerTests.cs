@@ -198,6 +198,7 @@ public sealed class CoverageRunnerTests
             TimeoutFactor: 10,
             ProjectFile: null,
             TestCommand: testCommand,
+            TestFilter: null,
             Verbose: false,
             TestProjects: testProjects ?? [],
             ExcludedTestProjects: excludedTestProjects ?? []);

@@ -21,6 +21,7 @@ public static class UsageText
           --timeout-factor N        Multiply baseline duration for mutant timeout.
           --project PATH            Owning production .csproj when discovery is ambiguous.
           --test-command CMD        Override the default dotnet test command.
+          --test-filter EXPR        Pass a VSTest filter to generated dotnet test commands.
           --test-project PATH       Test project to run; repeat for multiple projects.
           --exclude-test-project ID Exclude discovered test project by path or name.
           --verbose                 Print live worker progress.

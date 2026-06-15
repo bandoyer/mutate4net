@@ -19,6 +19,7 @@ Implemented:
 - Isolated worker workspaces.
 - Parallel mutant execution with `--max-workers`.
 - Explicit test project selection and exclusion.
+- Structured VSTest filters with zero-test detection.
 
 Still maturing:
 
@@ -118,6 +119,12 @@ Use a custom test command. Custom commands currently treat all mutation sites as
 mutate4net path/to/File.cs --test-command "dotnet test --filter Category!=no-mutate"
 ```
 
+Prefer `--test-filter` when you only need a VSTest filter. mutate4net keeps the generated `dotnet test` command compatible with coverage, worker path remapping, and multi-project test selection:
+
+```powershell
+mutate4net path/to/File.cs --test-project tests/App.Unit/App.Unit.csproj --test-filter "FullyQualifiedName~CalculatorTests"
+```
+
 Run only selected test projects while still generating coverage:
 
 ```powershell
@@ -149,6 +156,8 @@ When multiple test projects are selected, it writes one report per project and u
 If the report exists, uncovered mutation sites are reported and skipped. If coverage is unavailable, mutate4net currently treats all discovered sites as covered.
 
 For many projects this means the test project should reference either `coverlet.msbuild` or `coverlet.collector`.
+
+If `dotnet test` reports that a command ran zero tests, mutate4net treats that as a failed test command. This prevents empty filters from appearing as survived mutants.
 
 ## Worker Copy Tuning
 

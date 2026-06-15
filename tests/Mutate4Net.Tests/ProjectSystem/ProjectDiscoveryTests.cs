@@ -287,6 +287,30 @@ public sealed class ProjectDiscoveryTests
         Assert.Equal(["dotnet", "test", unit], command.Command);
     }
 
+    [Fact]
+    public void TestCommandFactory_AppendsTestFilterToGeneratedCommands()
+    {
+        using var workspace = ProjectWorkspace.Create();
+        workspace.Write("App.sln", string.Empty);
+        workspace.Write("src/App/App.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        string unit = workspace.Write("tests/App.Unit/App.Unit.csproj", TestProjectXml());
+        string source = workspace.Write("src/App/Calculator.cs", "class Calculator { }");
+
+        TestCommand command = new TestCommandFactory().Create(
+            source,
+            customCommand: null,
+            testProjects: ["tests/App.Unit/App.Unit.csproj"],
+            excludedTestProjects: [],
+            testFilter: "FullyQualifiedName~CalculatorTests");
+
+        Assert.Single(command.Commands);
+        Assert.Equal(["dotnet", "test", unit, "--filter", "FullyQualifiedName~CalculatorTests"], command.Command);
+    }
+
     private static string TestProjectXml() =>
         """
         <Project Sdk="Microsoft.NET.Sdk">
