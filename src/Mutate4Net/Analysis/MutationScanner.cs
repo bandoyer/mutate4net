@@ -143,8 +143,7 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         FileLinePositionSpan lineSpan = _tree.GetLineSpan(scopeNode.Span);
         int startLine = lineSpan.StartLinePosition.Line + 1;
         int endLine = lineSpan.EndLinePosition.Line + 1;
-        string rawId = $"{kind}:{ContainingTypeName(scopeNode)}#{displayName}:{startLine}";
-        string id = Base64Url(rawId);
+        string id = $"{kind}:{ContainingTypeName(scopeNode)}#{displayName}:{startLine}";
 
         if (!_scopes.ContainsKey(id))
         {
@@ -260,16 +259,9 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         _ => null
     };
 
-    private static string Base64Url(string value) =>
-        Convert.ToBase64String(Encoding.UTF8.GetBytes(value))
-            .TrimEnd('=')
-            .Replace('+', '-')
-            .Replace('/', '_');
-
     private static string Hash(string value)
     {
         byte[] bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 }
-

@@ -29,12 +29,14 @@ public sealed class MutationCatalog
         SyntaxNode root = await tree.GetRootAsync();
         var scanner = new MutationScanner(file, source, tree, semanticModel);
         scanner.Visit(root);
+        var scopes = scanner.Scopes.OrderBy(scope => scope.Id, StringComparer.Ordinal).ToArray();
 
         return new SourceAnalysis(
             file,
             source,
             scanner.Sites.OrderBy(site => site.Start).ToArray(),
-            scanner.Scopes.OrderBy(scope => scope.Id, StringComparer.Ordinal).ToArray());
+            scopes,
+            _manifestSupport.HashScopes(scopes));
     }
 
     private static IEnumerable<MetadataReference> CreateMetadataReferences()
@@ -51,4 +53,3 @@ public sealed class MutationCatalog
         }
     }
 }
-
