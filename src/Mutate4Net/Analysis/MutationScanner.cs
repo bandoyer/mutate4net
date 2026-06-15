@@ -159,6 +159,29 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         base.VisitBinaryPattern(node);
     }
 
+    public override void VisitConditionalExpression(ConditionalExpressionSyntax node)
+    {
+        string original = _source[node.Span.Start..node.Span.End];
+        AddSite(
+            node,
+            node.Span,
+            original,
+            _source[node.WhenTrue.Span.Start..node.WhenTrue.Span.End],
+            "replace conditional expression with true branch",
+            "conditional-expression",
+            "conditional");
+        AddSite(
+            node,
+            node.Span,
+            original,
+            _source[node.WhenFalse.Span.Start..node.WhenFalse.Span.End],
+            "replace conditional expression with false branch",
+            "conditional-expression",
+            "conditional");
+
+        base.VisitConditionalExpression(node);
+    }
+
     public override void VisitReturnStatement(ReturnStatementSyntax node)
     {
         AddNullReplacement(node.Expression);

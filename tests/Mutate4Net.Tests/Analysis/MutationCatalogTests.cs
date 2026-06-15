@@ -155,6 +155,38 @@ public sealed class MutationCatalogTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_DiscoversConditionalExpressionBranches()
+    {
+        const string source = """
+            class Sample
+            {
+                int Choose(bool flag, int left, int right)
+                {
+                    return flag ? left + 1 : right - 1;
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "conditional",
+            MutatorId: "conditional-expression",
+            Description: "replace conditional expression with true branch",
+            Replacement: "left + 1"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "conditional",
+            MutatorId: "conditional-expression",
+            Description: "replace conditional expression with false branch",
+            Replacement: "right - 1"
+        });
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_DiscoversPatternOperators()
     {
         const string source = """
