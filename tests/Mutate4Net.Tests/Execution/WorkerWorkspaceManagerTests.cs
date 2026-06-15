@@ -34,6 +34,45 @@ public sealed class WorkerWorkspaceManagerTests
         Assert.False(Directory.Exists(Path.Combine(workspace.Root, ".mutate4net", "workers")));
     }
 
+    [Fact]
+    public void Create_SkipsDefaultHeavyweightDirectories()
+    {
+        using var workspace = TempWorkspace.Create();
+        string source = workspace.Write("src/Sample.cs", "class Sample { }");
+        workspace.Write("node_modules/pkg/index.js", "module.exports = {};");
+        workspace.Write("dist/bundle.js", "compiled");
+        var manager = new WorkerWorkspaceManager();
+
+        WorkerWorkspace worker = manager.Create(workspace.Root, source);
+
+        Assert.False(Directory.Exists(Path.Combine(worker.ModuleRoot, "node_modules")));
+        Assert.False(Directory.Exists(Path.Combine(worker.ModuleRoot, "dist")));
+    }
+
+    [Fact]
+    public void Create_UsesMutate4NetIgnorePatterns()
+    {
+        using var workspace = TempWorkspace.Create();
+        string source = workspace.Write("src/Sample.cs", "class Sample { }");
+        workspace.Write(".mutate4netignore", """
+            # trim non-build files from worker copies
+            docs/
+            *.tmp
+            src/**/Generated.cs
+            """);
+        workspace.Write("docs/guide.md", "large docs");
+        workspace.Write("src/Notes.tmp", "scratch");
+        workspace.Write("src/Nested/Generated.cs", "class Generated { }");
+        var manager = new WorkerWorkspaceManager();
+
+        WorkerWorkspace worker = manager.Create(workspace.Root, source);
+
+        Assert.False(Directory.Exists(Path.Combine(worker.ModuleRoot, "docs")));
+        Assert.False(File.Exists(Path.Combine(worker.ModuleRoot, "src", "Notes.tmp")));
+        Assert.False(File.Exists(Path.Combine(worker.ModuleRoot, "src", "Nested", "Generated.cs")));
+        Assert.True(File.Exists(Path.Combine(worker.ModuleRoot, "src", "Sample.cs")));
+    }
+
     private sealed class TempWorkspace : IDisposable
     {
         private TempWorkspace(string root)

@@ -127,6 +127,20 @@ If the report exists, uncovered mutation sites are reported and skipped. If cove
 
 For many projects this means the test project should reference either `coverlet.msbuild` or `coverlet.collector`.
 
+## Worker Copy Tuning
+
+mutate4net copies the module root into `.mutate4net/workers/run-*/worker-*` before applying mutants. It always skips common heavy directories such as `bin`, `obj`, `.git`, `.vs`, `.mutate4net`, `node_modules`, `packages`, `artifacts`, `coverage`, and `dist`.
+
+For large repositories, add a `.mutate4netignore` file at the module root to skip additional files or directories from worker copies:
+
+```text
+# comments and blank lines are ignored
+docs/
+scripts/generated/
+*.tmp
+src/**/Generated.cs
+```
+
 ## Exit Codes
 
 - `0`: success, scan success, manifest update success, or all executed mutants killed.
