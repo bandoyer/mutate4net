@@ -177,6 +177,48 @@ public sealed class MutationRunServiceTests
         Assert.Contains("Summary: 1 killed, 0 survived, 1 total.", outcome.Output);
     }
 
+    [Fact]
+    public async Task RunAsync_ReuseCoverageSkipsUncoveredMutants()
+    {
+        using var sample = SampleFile.Create("""
+            class Sample
+            {
+                bool First() => true;
+                bool Second() => false;
+            }
+            """);
+        string moduleRoot = Path.GetDirectoryName(sample.Path)!;
+        string coverageDirectory = Path.Combine(moduleRoot, ".mutate4net", "coverage");
+        Directory.CreateDirectory(coverageDirectory);
+        await File.WriteAllTextAsync(Path.Combine(coverageDirectory, "coverage.cobertura.xml"), """
+            <coverage>
+              <packages>
+                <package name="">
+                  <classes>
+                    <class name="Sample" filename="Sample.cs">
+                      <lines>
+                        <line number="4" hits="1" />
+                      </lines>
+                    </class>
+                  </classes>
+                </package>
+              </packages>
+            </coverage>
+            """);
+        var executor = new FakeCommandExecutor(
+            new CommandResult(0, "baseline ok", 10, false),
+            new CommandResult(1, "mutant failed", 11, false));
+        var service = CreateService(executor);
+
+        MutationRunOutcome outcome = await service.RunAsync(Arguments(sample.Path, reuseCoverage: true));
+
+        Assert.Equal(0, outcome.ExitCode);
+        Assert.Equal(2, executor.RunCount);
+        Assert.Contains("UNCOVERED", outcome.Output);
+        Assert.Contains("Uncovered mutation sites: 1", outcome.Output);
+        Assert.Contains("Summary: 1 killed, 0 survived, 1 total.", outcome.Output);
+    }
+
     private static MutationRunService CreateService(ICommandExecutor executor) =>
         new(
             new MutationCatalog(),
@@ -188,11 +230,12 @@ public sealed class MutationRunServiceTests
     private static CliArguments Arguments(
         string path,
         IReadOnlySet<int>? lines = null,
-        bool mutateAll = false) =>
+        bool mutateAll = false,
+        bool reuseCoverage = false) =>
         new(
             path,
             CliMode.Mutate,
-            ReuseCoverage: false,
+            ReuseCoverage: reuseCoverage,
             Lines: lines ?? new HashSet<int>(),
             SinceLastRun: false,
             MutateAll: mutateAll,

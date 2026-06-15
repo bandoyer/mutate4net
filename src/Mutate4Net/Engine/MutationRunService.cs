@@ -1,5 +1,6 @@
 using Mutate4Net.Analysis;
 using Mutate4Net.Cli;
+using Mutate4Net.Coverage;
 using Mutate4Net.Execution;
 using Mutate4Net.Manifest;
 using Mutate4Net.Model;
@@ -17,6 +18,8 @@ public sealed class MutationRunService
     private readonly ReportFormatter _reportFormatter;
     private readonly DifferentialSelector _selector;
     private readonly LineFilter _lineFilter;
+    private readonly CoverageLoader _coverageLoader;
+    private readonly MutationCoverageFilter _coverageFilter;
     private readonly ExecutionMessages _messages;
 
     public MutationRunService()
@@ -28,6 +31,8 @@ public sealed class MutationRunService
             new ReportFormatter(),
             null,
             new LineFilter(),
+            new CoverageLoader(),
+            new MutationCoverageFilter(),
             new ExecutionMessages())
     {
     }
@@ -40,6 +45,8 @@ public sealed class MutationRunService
         ReportFormatter reportFormatter,
         DifferentialSelector? selector = null,
         LineFilter? lineFilter = null,
+        CoverageLoader? coverageLoader = null,
+        MutationCoverageFilter? coverageFilter = null,
         ExecutionMessages? messages = null)
     {
         _catalog = catalog;
@@ -49,6 +56,8 @@ public sealed class MutationRunService
         _reportFormatter = reportFormatter;
         _selector = selector ?? new DifferentialSelector(manifestSupport);
         _lineFilter = lineFilter ?? new LineFilter();
+        _coverageLoader = coverageLoader ?? new CoverageLoader();
+        _coverageFilter = coverageFilter ?? new MutationCoverageFilter();
         _messages = messages ?? new ExecutionMessages();
     }
 
@@ -73,10 +82,12 @@ public sealed class MutationRunService
             return new MutationRunOutcome(2, string.Empty, error);
         }
 
+        CoverageReport coverage = _coverageLoader.Load(arguments, command.WorkingDirectory);
+        CoverageSelection coverageSelection = _coverageFilter.Filter(command.WorkingDirectory, selectedSites, coverage);
         IReadOnlyList<MutationResult> results = await RunMutantsAsync(
             arguments.TargetFile,
             analysis.Source,
-            selectedSites,
+            coverageSelection.Covered,
             command,
             TimeoutMillis(baseline.DurationMillis, arguments.TimeoutFactor));
 
@@ -92,8 +103,12 @@ public sealed class MutationRunService
         string report = _reportFormatter.Format(
             command.WorkingDirectory,
             baseline,
-            _messages.ExtraText(arguments, differentialSelection, selectedSites.Count),
-            [],
+            _messages.ExtraText(
+                arguments,
+                differentialSelection,
+                coverageSelection.Covered.Count,
+                coverageSelection.Uncovered.Count),
+            coverageSelection.Uncovered,
             results);
         return new MutationRunOutcome(survived ? 3 : 0, report, string.Empty);
     }
