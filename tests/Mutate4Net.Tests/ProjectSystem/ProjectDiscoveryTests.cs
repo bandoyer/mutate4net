@@ -23,6 +23,28 @@ public sealed class ProjectDiscoveryTests
         Assert.NotNull(info);
         Assert.Equal(project, info.ProjectFile);
         Assert.False(info.IsTestProject);
+        Assert.Null(info.SolutionFile);
+    }
+
+    [Fact]
+    public void Discover_AttachesNearestSolution()
+    {
+        using var workspace = ProjectWorkspace.Create();
+        string solution = workspace.Write("App.sln", string.Empty);
+        string project = workspace.Write("src/App/App.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net8.0</TargetFramework>
+              </PropertyGroup>
+            </Project>
+            """);
+        string source = workspace.Write("src/App/Calculator.cs", "class Calculator { }");
+
+        ProjectInfo? info = new ProjectDiscovery().Discover(source);
+
+        Assert.NotNull(info);
+        Assert.Equal(project, info.ProjectFile);
+        Assert.Equal(solution, info.SolutionFile);
     }
 
     [Fact]
@@ -109,6 +131,24 @@ public sealed class ProjectDiscoveryTests
         Assert.Equal(["dotnet", "test", project, "--no-restore"], command.Command);
     }
 
+    [Fact]
+    public void TestCommandFactory_PrefersNearestSolution()
+    {
+        using var workspace = ProjectWorkspace.Create();
+        string solution = workspace.Write("App.sln", string.Empty);
+        workspace.Write("src/App/App.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        string source = workspace.Write("src/App/Calculator.cs", "class Calculator { }");
+
+        TestCommand command = new TestCommandFactory().Create(source, customCommand: null);
+
+        Assert.Equal(workspace.Path(""), command.WorkingDirectory);
+        Assert.Equal(["dotnet", "test", solution, "--no-restore"], command.Command);
+    }
+
     private sealed class ProjectWorkspace : IDisposable
     {
         private readonly string _root;
@@ -154,4 +194,3 @@ public sealed class ProjectDiscoveryTests
         }
     }
 }
-

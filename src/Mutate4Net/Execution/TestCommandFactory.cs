@@ -19,7 +19,9 @@ public sealed class TestCommandFactory
     public TestCommand Create(string sourceFile, string? customCommand)
     {
         ProjectInfo? project = _projectDiscovery.Discover(sourceFile);
-        string workingDirectory = project?.ProjectDirectory ?? Path.GetDirectoryName(sourceFile)!;
+        string workingDirectory = project is null
+            ? Path.GetDirectoryName(sourceFile)!
+            : WorkingDirectory(project);
         if (!string.IsNullOrWhiteSpace(customCommand))
         {
             return new TestCommand(ShellCommand(customCommand), workingDirectory, IsCustom: true, DisplayCommand: customCommand);
@@ -30,7 +32,8 @@ public sealed class TestCommandFactory
             return new TestCommand(["dotnet", "test", "--no-restore"], workingDirectory);
         }
 
-        return new TestCommand(["dotnet", "test", project.ProjectFile, "--no-restore"], workingDirectory);
+        string testTarget = project.SolutionFile ?? project.ProjectFile;
+        return new TestCommand(["dotnet", "test", testTarget, "--no-restore"], workingDirectory);
     }
 
     public TestCommand CreateCoverageCommand(string sourceFile, string coverageOutputPrefix)
@@ -52,4 +55,9 @@ public sealed class TestCommandFactory
 
         return ["/bin/sh", "-c", command];
     }
+
+    private static string WorkingDirectory(ProjectInfo project) =>
+        project.SolutionFile is null
+            ? project.ProjectDirectory
+            : Path.GetDirectoryName(project.SolutionFile)!;
 }

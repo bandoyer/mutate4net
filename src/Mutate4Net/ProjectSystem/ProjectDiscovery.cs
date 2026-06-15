@@ -63,7 +63,8 @@ public sealed class ProjectDiscovery
                 yield return new ProjectInfo(
                     project.FullName,
                     project.DirectoryName!,
-                    IsTestProject(project.FullName));
+                    IsTestProject(project.FullName),
+                    FindNearestSolution(project.Directory!));
             }
 
             directory = directory.Parent;
@@ -169,4 +170,29 @@ public sealed class ProjectDiscovery
 
     private static string NormalizePath(string path) =>
         path.Replace('\\', '/');
+
+    private static string? FindNearestSolution(DirectoryInfo projectDirectory)
+    {
+        DirectoryInfo? directory = projectDirectory;
+        while (directory is not null)
+        {
+            FileInfo[] solutions = directory.GetFiles("*.sln")
+                .Concat(directory.GetFiles("*.slnx"))
+                .ToArray();
+            if (solutions.Length == 1)
+            {
+                return solutions[0].FullName;
+            }
+
+            if (solutions.Length > 1)
+            {
+                string files = string.Join(", ", solutions.Select(solution => solution.FullName));
+                throw new InvalidOperationException($"Multiple solution files found near {projectDirectory.FullName}: {files}");
+            }
+
+            directory = directory.Parent;
+        }
+
+        return null;
+    }
 }
