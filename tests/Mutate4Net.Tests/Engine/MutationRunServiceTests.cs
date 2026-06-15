@@ -69,6 +69,48 @@ public sealed class MutationRunServiceTests
     }
 
     [Fact]
+    public async Task RunAsync_RemapsExplicitProjectIntoWorkerWorkspace()
+    {
+        using var workspace = TempProjectWorkspace.Create();
+        string projectFile = workspace.Write("src/App/App.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net8.0</TargetFramework>
+                <ImplicitUsings>enable</ImplicitUsings>
+                <Nullable>enable</Nullable>
+              </PropertyGroup>
+            </Project>
+            """);
+        string sourceFile = workspace.Write("src/App/Sample.cs", """
+            namespace App;
+
+            public static class Sample
+            {
+                public static bool Flag() => true;
+            }
+            """);
+        var executor = new FakeCommandExecutor(
+            (runCount, _, workingDirectory) =>
+            {
+                if (runCount == 2)
+                {
+                    Assert.Contains(".mutate4net", workingDirectory);
+                    Assert.True(File.Exists(Path.Combine(workingDirectory, "App.csproj")));
+                }
+            },
+            new CommandResult(0, "baseline ok", 10, false),
+            new CommandResult(1, "mutant failed", 11, false));
+        var service = CreateService(executor);
+
+        MutationRunOutcome outcome = await service.RunAsync(Arguments(
+            sourceFile,
+            projectFile: projectFile));
+
+        Assert.Equal(0, outcome.ExitCode);
+        Assert.Equal(2, executor.RunCount);
+    }
+
+    [Fact]
     public async Task RunAsync_MaxWorkersRunsAllMutantsWithDeterministicReportOrder()
     {
         using var sample = SampleFile.Create("""
@@ -353,6 +395,7 @@ public sealed class MutationRunServiceTests
         bool mutateAll = false,
         bool reuseCoverage = false,
         string? testCommand = "fake",
+        string? projectFile = null,
         int maxWorkers = 1) =>
         new(
             path,
@@ -364,7 +407,7 @@ public sealed class MutationRunServiceTests
             MutationWarning: 50,
             MaxWorkers: maxWorkers,
             TimeoutFactor: 10,
-            ProjectFile: null,
+            ProjectFile: projectFile,
             TestCommand: testCommand,
             Verbose: false,
             TestProjects: [],
@@ -407,6 +450,48 @@ public sealed class MutationRunServiceTests
                 RunCount++;
                 _onRun?.Invoke(RunCount, command, workingDirectory);
                 return Task.FromResult(_results.Dequeue());
+            }
+        }
+    }
+
+    private sealed class TempProjectWorkspace : IDisposable
+    {
+        private TempProjectWorkspace(string root)
+        {
+            Root = root;
+        }
+
+        public string Root { get; }
+
+        public static TempProjectWorkspace Create()
+        {
+            string root = Path.Combine(
+                Path.GetTempPath(),
+                "mutate4net-project-tests",
+                Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            return new TempProjectWorkspace(root);
+        }
+
+        public string Write(string relativePath, string contents)
+        {
+            string path = Path.Combine(Root, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, contents);
+            return path;
+        }
+
+        public void Dispose()
+        {
+            try
+            {
+                Directory.Delete(Root, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
             }
         }
     }

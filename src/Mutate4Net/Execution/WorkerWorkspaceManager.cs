@@ -18,7 +18,10 @@ public sealed class WorkerWorkspaceManager
         "dist",
         ".cache",
         ".next",
-        ".angular"
+        ".angular",
+        "logs",
+        "StrykerOutput",
+        "tmp"
     };
 
     public WorkerWorkspace Create(string moduleRoot, string sourceFile)
@@ -66,7 +69,7 @@ public sealed class WorkerWorkspaceManager
         {
             string name = Path.GetFileName(directory);
             string relativePath = NormalizePath(Path.GetRelativePath(moduleRoot, directory));
-            if (ExcludedDirectories.Contains(name) ||
+            if (ShouldSkipDirectory(name) ||
                 ignorePatterns.Any(pattern => pattern.Matches(relativePath, isDirectory: true)))
             {
                 continue;
@@ -119,6 +122,12 @@ public sealed class WorkerWorkspaceManager
 
     private static string NormalizePath(string path) =>
         path.Replace('\\', '/').TrimStart('/');
+
+    private static bool ShouldSkipDirectory(string name) =>
+        ExcludedDirectories.Contains(name) ||
+        name.StartsWith(".", StringComparison.Ordinal) ||
+        name.StartsWith("tmp-", StringComparison.OrdinalIgnoreCase) ||
+        name.StartsWith("temp-", StringComparison.OrdinalIgnoreCase);
 
     private sealed record IgnorePattern(string Pattern, bool DirectoryOnly)
     {

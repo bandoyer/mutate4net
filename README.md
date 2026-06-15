@@ -152,7 +152,7 @@ For many projects this means the test project should reference either `coverlet.
 
 ## Worker Copy Tuning
 
-mutate4net copies the module root into `.mutate4net/workers/run-*/worker-*` before applying mutants. It always skips common heavy directories such as `bin`, `obj`, `.git`, `.vs`, `.mutate4net`, `node_modules`, `packages`, `artifacts`, `coverage`, and `dist`.
+mutate4net copies the module root into `.mutate4net/workers/run-*/worker-*` before applying mutants. It always skips common heavy directories such as `bin`, `obj`, `.git`, `.vs`, `.mutate4net`, `node_modules`, `packages`, `artifacts`, `coverage`, `dist`, hidden tool directories, temp folders, logs, and Stryker output.
 
 For large repositories, add a `.mutate4netignore` file at the module root to skip additional files or directories from worker copies:
 

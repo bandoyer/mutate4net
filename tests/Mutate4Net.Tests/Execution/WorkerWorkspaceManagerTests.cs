@@ -41,12 +41,24 @@ public sealed class WorkerWorkspaceManagerTests
         string source = workspace.Write("src/Sample.cs", "class Sample { }");
         workspace.Write("node_modules/pkg/index.js", "module.exports = {};");
         workspace.Write("dist/bundle.js", "compiled");
+        workspace.Write(".dotnet-cli/cache/state.txt", "tool state");
+        workspace.Write(".claude/settings.local.json", "{}");
+        workspace.Write("StrykerOutput/report.html", "<html></html>");
+        workspace.Write("logs/latest.log", "log");
+        workspace.Write("tmp/cache.txt", "cache");
+        workspace.Write("tmp-run/cache.txt", "cache");
         var manager = new WorkerWorkspaceManager();
 
         WorkerWorkspace worker = manager.Create(workspace.Root, source);
 
         Assert.False(Directory.Exists(Path.Combine(worker.ModuleRoot, "node_modules")));
         Assert.False(Directory.Exists(Path.Combine(worker.ModuleRoot, "dist")));
+        Assert.False(Directory.Exists(Path.Combine(worker.ModuleRoot, ".dotnet-cli")));
+        Assert.False(Directory.Exists(Path.Combine(worker.ModuleRoot, ".claude")));
+        Assert.False(Directory.Exists(Path.Combine(worker.ModuleRoot, "StrykerOutput")));
+        Assert.False(Directory.Exists(Path.Combine(worker.ModuleRoot, "logs")));
+        Assert.False(Directory.Exists(Path.Combine(worker.ModuleRoot, "tmp")));
+        Assert.False(Directory.Exists(Path.Combine(worker.ModuleRoot, "tmp-run")));
     }
 
     [Fact]

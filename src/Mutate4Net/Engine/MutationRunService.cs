@@ -140,6 +140,7 @@ public sealed class MutationRunService
         {
             Task<MutationResult>[] tasks = sites
                 .Select((site, index) => RunMutantAsync(
+                    moduleRoot,
                     originalSource,
                     site,
                     arguments,
@@ -160,6 +161,7 @@ public sealed class MutationRunService
     }
 
     private async Task<MutationResult> RunMutantAsync(
+        string moduleRoot,
         string originalSource,
         MutationSite site,
         CliArguments arguments,
@@ -178,7 +180,11 @@ public sealed class MutationRunService
 
         try
         {
-            CliArguments workerArguments = arguments with { TargetFile = workspace.SourceFile };
+            CliArguments workerArguments = arguments with
+            {
+                TargetFile = workspace.SourceFile,
+                ProjectFile = RemapPathToWorker(arguments.ProjectFile, moduleRoot, workspace.ModuleRoot)
+            };
             TestCommand workerCommand = _testCommandFactory.Create(workerArguments);
             string mutated = originalSource[..site.Start] + site.Replacement + originalSource[site.End..];
             await File.WriteAllTextAsync(workspace.SourceFile, mutated);
@@ -231,13 +237,29 @@ public sealed class MutationRunService
         string fullSelector = Path.GetFullPath(selector);
         string fullWorkingDirectory = Path.GetFullPath(workingDirectory);
         string relative = Path.GetRelativePath(fullWorkingDirectory, fullSelector);
-        bool outsideWorkingDirectory =
-            relative == ".." ||
-            relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) ||
-            relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal) ||
-            Path.IsPathRooted(relative);
-        return outsideWorkingDirectory
+        return IsOutsideDirectory(relative)
             ? selector
             : relative;
     }
+
+    private static string? RemapPathToWorker(string? path, string moduleRoot, string workerRoot)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return path;
+        }
+
+        string fullPath = Path.GetFullPath(path);
+        string fullModuleRoot = Path.GetFullPath(moduleRoot);
+        string relative = Path.GetRelativePath(fullModuleRoot, fullPath);
+        return IsOutsideDirectory(relative)
+            ? path
+            : Path.GetFullPath(Path.Combine(workerRoot, relative));
+    }
+
+    private static bool IsOutsideDirectory(string relativePath) =>
+        relativePath == ".." ||
+        relativePath.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) ||
+        relativePath.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal) ||
+        Path.IsPathRooted(relativePath);
 }
