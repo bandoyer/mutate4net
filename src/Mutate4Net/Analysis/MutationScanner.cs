@@ -190,7 +190,7 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
 
     public override void VisitExpressionStatement(ExpressionStatementSyntax node)
     {
-        if (IsRemovableInvocationStatement(node))
+        if (RemovableStatementDescription(node) is { } description)
         {
             string original = _source[node.Span.Start..node.Span.End];
             AddSite(
@@ -198,7 +198,7 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
                 node.Span,
                 original,
                 string.Empty,
-                "remove invocation statement",
+                description,
                 "statement-removal",
                 "statement");
         }
@@ -526,10 +526,23 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         expressionType.TypeArguments[0].TypeKind == TypeKind.Delegate;
     }
 
-    private static bool IsRemovableInvocationStatement(ExpressionStatementSyntax node) =>
-        node.Parent is BlockSyntax &&
-        (node.Expression is InvocationExpressionSyntax ||
-         node.Expression is AwaitExpressionSyntax { Expression: InvocationExpressionSyntax });
+    private static string? RemovableStatementDescription(ExpressionStatementSyntax node)
+    {
+        if (node.Parent is not BlockSyntax)
+        {
+            return null;
+        }
+
+        return node.Expression switch
+        {
+            InvocationExpressionSyntax => "remove invocation statement",
+            AwaitExpressionSyntax { Expression: InvocationExpressionSyntax } => "remove invocation statement",
+            AssignmentExpressionSyntax => "remove assignment statement",
+            PrefixUnaryExpressionSyntax prefix when UpdateOperatorFor(prefix.Kind()) is not null => "remove update statement",
+            PostfixUnaryExpressionSyntax postfix when UpdateOperatorFor(postfix.Kind()) is not null => "remove update statement",
+            _ => null
+        };
+    }
 
     private static bool IsSystemLinqMethod(IMethodSymbol method)
     {

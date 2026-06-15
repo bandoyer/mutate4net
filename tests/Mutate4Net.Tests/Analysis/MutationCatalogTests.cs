@@ -275,6 +275,11 @@ public sealed class MutationCatalogTests
             {
                 async Task SaveAsync(Notifier notifier)
                 {
+                    int count = 0;
+                    count = 1;
+                    count += 2;
+                    count++;
+                    --count;
                     notifier.Notify();
                     await notifier.FlushAsync();
                 }
@@ -300,6 +305,39 @@ public sealed class MutationCatalogTests
         {
             Category: "statement",
             MutatorId: "statement-removal",
+            Description: "remove assignment statement",
+            Original: "count = 1;",
+            Replacement: ""
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "statement",
+            MutatorId: "statement-removal",
+            Description: "remove assignment statement",
+            Original: "count += 2;",
+            Replacement: ""
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "statement",
+            MutatorId: "statement-removal",
+            Description: "remove update statement",
+            Original: "count++;",
+            Replacement: ""
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "statement",
+            MutatorId: "statement-removal",
+            Description: "remove update statement",
+            Original: "--count;",
+            Replacement: ""
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "statement",
+            MutatorId: "statement-removal",
+            Description: "remove invocation statement",
             Original: "notifier.Notify();",
             Replacement: ""
         });
@@ -307,21 +345,30 @@ public sealed class MutationCatalogTests
         {
             Category: "statement",
             MutatorId: "statement-removal",
+            Description: "remove invocation statement",
             Original: "await notifier.FlushAsync();",
             Replacement: ""
         });
     }
 
     [Fact]
-    public async Task AnalyzeAsync_DoesNotRemoveEmbeddedInvocationStatements()
+    public async Task AnalyzeAsync_DoesNotRemoveEmbeddedExpressionStatements()
     {
         const string source = """
             class Sample
             {
                 void Save(bool shouldSave, Notifier notifier)
                 {
+                    int count = 0;
+
                     if (shouldSave)
                         notifier.Notify();
+
+                    if (shouldSave)
+                        count = 1;
+
+                    if (shouldSave)
+                        count++;
                 }
             }
 
