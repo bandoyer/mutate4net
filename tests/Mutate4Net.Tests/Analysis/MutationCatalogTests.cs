@@ -187,6 +187,85 @@ public sealed class MutationCatalogTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_DiscoversSupportedLinqMethodMutators()
+    {
+        const string source = """
+            using System.Linq;
+
+            class Sample
+            {
+                int FirstValue(int[] values)
+                {
+                    return values.First();
+                }
+
+                int LastPositive(int[] values)
+                {
+                    return values.LastOrDefault(value => value > 0);
+                }
+
+                int ByIndex(int[] values, int index)
+                {
+                    return values.ElementAt(index);
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "linq",
+            MutatorId: "linq-method",
+            Original: "First",
+            Replacement: "FirstOrDefault"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "linq",
+            MutatorId: "linq-method",
+            Original: "LastOrDefault",
+            Replacement: "Last"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "linq",
+            MutatorId: "linq-method",
+            Original: "ElementAt",
+            Replacement: "ElementAtOrDefault"
+        });
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_DoesNotTreatCustomMethodsAsLinqMutators()
+    {
+        const string source = """
+            class Sample
+            {
+                int Pick()
+                {
+                    return First();
+                }
+
+                int First()
+                {
+                    return 1;
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.DoesNotContain(analysis.Sites, site => site is
+        {
+            Category: "linq",
+            MutatorId: "linq-method"
+        });
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_DiscoversPatternOperators()
     {
         const string source = """

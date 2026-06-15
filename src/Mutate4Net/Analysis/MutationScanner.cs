@@ -182,6 +182,12 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         base.VisitConditionalExpression(node);
     }
 
+    public override void VisitInvocationExpression(InvocationExpressionSyntax node)
+    {
+        AddLinqMethodReplacement(node);
+        base.VisitInvocationExpression(node);
+    }
+
     public override void VisitReturnStatement(ReturnStatementSyntax node)
     {
         AddNullReplacement(node.Expression);
@@ -211,6 +217,36 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
 
         AddNullReplacement(node.Right);
         base.VisitAssignmentExpression(node);
+    }
+
+    private void AddLinqMethodReplacement(InvocationExpressionSyntax node)
+    {
+        SimpleNameSyntax? name = node.Expression switch
+        {
+            MemberAccessExpressionSyntax memberAccess => memberAccess.Name,
+            MemberBindingExpressionSyntax memberBinding => memberBinding.Name,
+            _ => null
+        };
+        if (name is null)
+        {
+            return;
+        }
+
+        if (_semanticModel.GetSymbolInfo(node).Symbol is not IMethodSymbol method ||
+            !IsSystemLinqMethod(method) ||
+            LinqReplacementFor(method) is not { } replacement)
+        {
+            return;
+        }
+
+        AddSite(
+            node,
+            name.Identifier.Span,
+            name.Identifier.ValueText,
+            replacement,
+            $"replace {name.Identifier.ValueText} with {replacement}",
+            "linq-method",
+            "linq");
     }
 
     private void AddNullReplacement(ExpressionSyntax? expression)
@@ -421,6 +457,65 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         SyntaxKind.PostDecrementExpression => ("--", "++"),
         _ => null
     };
+
+    private static string? LinqReplacementFor(IMethodSymbol method)
+    {
+        IParameterSymbol[] callParameters = LinqCallParameters(method).ToArray();
+        return method.Name switch
+        {
+            "First" when HasNoArgumentsOrPredicate(callParameters) => "FirstOrDefault",
+            "FirstOrDefault" when HasNoArgumentsOrPredicate(callParameters) => "First",
+            "Last" when HasNoArgumentsOrPredicate(callParameters) => "LastOrDefault",
+            "LastOrDefault" when HasNoArgumentsOrPredicate(callParameters) => "Last",
+            "Single" when HasNoArgumentsOrPredicate(callParameters) => "SingleOrDefault",
+            "SingleOrDefault" when HasNoArgumentsOrPredicate(callParameters) => "Single",
+            "ElementAt" when callParameters.Length == 1 => "ElementAtOrDefault",
+            "ElementAtOrDefault" when callParameters.Length == 1 => "ElementAt",
+            _ => null
+        };
+    }
+
+    private static IEnumerable<IParameterSymbol> LinqCallParameters(IMethodSymbol method)
+    {
+        if (method.ReducedFrom is null &&
+            method.IsExtensionMethod &&
+            method.Parameters.Length > 0)
+        {
+            return method.Parameters.Skip(1);
+        }
+
+        return method.Parameters;
+    }
+
+    private static bool HasNoArgumentsOrPredicate(IReadOnlyList<IParameterSymbol> parameters) =>
+        parameters.Count == 0 ||
+        parameters.Count == 1 && IsPredicateLike(parameters[0].Type);
+
+    private static bool IsPredicateLike(ITypeSymbol type)
+    {
+        if (type.TypeKind == TypeKind.Delegate)
+        {
+            return true;
+        }
+
+        return type is INamedTypeSymbol
+        {
+            Name: "Expression",
+            ContainingNamespace: { } ns,
+            TypeArguments.Length: 1
+        } expressionType &&
+        ns.ToDisplayString() == "System.Linq.Expressions" &&
+        expressionType.TypeArguments[0].TypeKind == TypeKind.Delegate;
+    }
+
+    private static bool IsSystemLinqMethod(IMethodSymbol method)
+    {
+        IMethodSymbol originalMethod = method.ReducedFrom ?? method;
+        INamedTypeSymbol? containingType = originalMethod.ContainingType;
+        return containingType is not null &&
+               containingType.ContainingNamespace.ToDisplayString() == "System.Linq" &&
+               containingType.Name is "Enumerable" or "Queryable";
+    }
 
     private static bool IsNumericValue(object? value, decimal expected)
     {
