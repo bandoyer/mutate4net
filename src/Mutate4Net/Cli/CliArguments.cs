@@ -17,4 +17,5 @@ public sealed record CliArguments(
     IReadOnlyList<string> TestProjects,
     IReadOnlyList<string> ExcludedTestProjects,
     IReadOnlySet<string> IncludedMutators,
-    IReadOnlySet<string> ExcludedMutators);
+    IReadOnlySet<string> ExcludedMutators,
+    bool AllFiles = false);

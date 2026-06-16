@@ -16,6 +16,7 @@ public sealed class CliArgumentsParser
         bool reuseCoverage = false;
         bool sinceLastRun = false;
         bool mutateAll = false;
+        bool allFiles = false;
         bool verbose = false;
         int mutationWarning = 50;
         int maxWorkers = Math.Max(1, Environment.ProcessorCount / 2);
@@ -52,6 +53,9 @@ public sealed class CliArgumentsParser
                     break;
                 case "--mutate-all":
                     mutateAll = true;
+                    break;
+                case "--all-files":
+                    allFiles = true;
                     break;
                 case "--verbose":
                     verbose = true;
@@ -182,19 +186,36 @@ public sealed class CliArgumentsParser
         }
 
         string target = targets[0];
-        if (Directory.Exists(target))
+        if (allFiles)
         {
-            return ParseOutcome.Error("Directory targets are not supported.");
-        }
+            if (!Directory.Exists(target) && !File.Exists(target))
+            {
+                return ParseOutcome.Error($"Target does not exist: {target}");
+            }
 
-        if (!string.Equals(Path.GetExtension(target), ".cs", StringComparison.OrdinalIgnoreCase))
-        {
-            return ParseOutcome.Error("Target must be a .cs source file.");
+            if (File.Exists(target) &&
+                !string.Equals(Path.GetExtension(target), ".cs", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(Path.GetExtension(target), ".csproj", StringComparison.OrdinalIgnoreCase))
+            {
+                return ParseOutcome.Error("--all-files target must be a .cs file, .csproj file, or directory.");
+            }
         }
-
-        if (!File.Exists(target))
+        else
         {
-            return ParseOutcome.Error($"Target file does not exist: {target}");
+            if (Directory.Exists(target))
+            {
+                return ParseOutcome.Error("Directory targets are not supported.");
+            }
+
+            if (!string.Equals(Path.GetExtension(target), ".cs", StringComparison.OrdinalIgnoreCase))
+            {
+                return ParseOutcome.Error("Target must be a .cs source file.");
+            }
+
+            if (!File.Exists(target))
+            {
+                return ParseOutcome.Error($"Target file does not exist: {target}");
+            }
         }
 
         string? mutatorOverlap = includedMutators.FirstOrDefault(mutator => excludedMutators.Contains(mutator));
@@ -222,6 +243,7 @@ public sealed class CliArgumentsParser
             updateManifest,
             reuseCoverage,
             lines.Count > 0,
+            allFiles,
             sinceLastRun,
             mutateAll,
             !string.IsNullOrWhiteSpace(testCommand),
@@ -252,7 +274,8 @@ public sealed class CliArgumentsParser
             testProjects,
             excludedTestProjects,
             includedMutators,
-            excludedMutators);
+            excludedMutators,
+            allFiles);
 
         return ParseOutcome.Success(parsed);
     }
@@ -358,6 +381,7 @@ public sealed class CliArgumentsParser
         bool updateManifest,
         bool reuseCoverage,
         bool hasLines,
+        bool allFiles,
         bool sinceLastRun,
         bool mutateAll,
         bool hasTestCommand,
@@ -384,6 +408,11 @@ public sealed class CliArgumentsParser
         if (scan && reuseCoverage)
         {
             return "--scan may not be combined with --reuse-coverage.";
+        }
+
+        if (allFiles && hasLines)
+        {
+            return "--all-files may not be combined with --lines.";
         }
 
         if (scan && (hasTestProjects || hasExcludedTestProjects))

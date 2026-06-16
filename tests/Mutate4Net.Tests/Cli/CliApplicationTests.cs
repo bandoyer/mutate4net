@@ -84,6 +84,49 @@ public sealed class CliApplicationTests
     }
 
     [Fact]
+    public async Task RunAsync_AllFilesScan_ScansProjectSources()
+    {
+        using var workspace = CliWorkspace.Create();
+        string project = workspace.Write("App.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        workspace.Write("Calculator.cs", """
+            class Calculator
+            {
+                bool Flag() => true;
+            }
+            """);
+        workspace.Write("Other.cs", """
+            class Other
+            {
+                bool Flag() => false;
+            }
+            """);
+        workspace.Write("obj/Generated.cs", """
+            class Generated
+            {
+                bool Flag() => true;
+            }
+            """);
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await new CliApplication().RunAsync([project, "--all-files", "--scan"], output, error);
+
+        string text = output.ToString();
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Source files: 2", text);
+        Assert.Contains("Calculator.cs", text);
+        Assert.Contains("Other.cs", text);
+        Assert.Contains("replace true with false", text);
+        Assert.Contains("replace false with true", text);
+        Assert.DoesNotContain("Generated.cs", text);
+        Assert.Equal(string.Empty, error.ToString());
+    }
+
+    [Fact]
     public async Task RunAsync_Mutate_ReturnsCliErrorForTestProjectTarget()
     {
         using var workspace = CliWorkspace.Create();

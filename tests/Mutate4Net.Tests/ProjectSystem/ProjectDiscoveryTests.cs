@@ -237,6 +237,54 @@ public sealed class ProjectDiscoveryTests
     }
 
     [Fact]
+    public void DiscoverProjectSources_EnumeratesSdkCompileItems()
+    {
+        using var workspace = ProjectWorkspace.Create();
+        string project = workspace.Write("src/App/App.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+              <ItemGroup>
+                <Compile Remove="Removed.cs" />
+              </ItemGroup>
+            </Project>
+            """);
+        string first = workspace.Write("src/App/First.cs", "class First { }");
+        string second = workspace.Write("src/App/Second.cs", "class Second { }");
+        workspace.Write("src/App/Removed.cs", "class Removed { }");
+        workspace.Write("src/App/bin/Generated.cs", "class Generated { }");
+        workspace.Write("src/App/obj/Generated.cs", "class Generated { }");
+        workspace.Write("src/App/.mutate4net/Worker.cs", "class Worker { }");
+
+        ProjectSourceSet sources = new ProjectDiscovery().DiscoverProjectSources(project);
+
+        Assert.Equal(project, sources.Project.ProjectFile);
+        Assert.Equal([first, second], sources.SourceFiles);
+    }
+
+    [Fact]
+    public void DiscoverProjectSources_UsesExplicitCompileItemsWhenDefaultItemsAreDisabled()
+    {
+        using var workspace = ProjectWorkspace.Create();
+        string project = workspace.Write("src/App/App.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net8.0</TargetFramework>
+                <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+              </PropertyGroup>
+              <ItemGroup>
+                <Compile Include="Sources/*.cs" />
+              </ItemGroup>
+            </Project>
+            """);
+        string included = workspace.Write("src/App/Sources/Included.cs", "class Included { }");
+        workspace.Write("src/App/Other.cs", "class Other { }");
+
+        ProjectSourceSet sources = new ProjectDiscovery().DiscoverProjectSources(project);
+
+        Assert.Equal([included], sources.SourceFiles);
+    }
+
+    [Fact]
     public void TestCommandFactory_ExcludesDiscoveredTestProjectByName()
     {
         using var workspace = ProjectWorkspace.Create();

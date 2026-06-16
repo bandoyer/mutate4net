@@ -13,7 +13,7 @@
     <RepositoryType>git</RepositoryType>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>mutate4net</ToolCommandName>
-    <Description>Single-file mutation testing for C# projects.</Description>
+    <Description>Mutation testing for C# projects.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

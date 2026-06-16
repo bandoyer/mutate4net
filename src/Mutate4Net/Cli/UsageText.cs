@@ -3,13 +3,15 @@ namespace Mutate4Net.Cli;
 public static class UsageText
 {
     public const string Text = """
-        mutate4net - mutation testing for one C# source file
+        mutate4net - mutation testing for C# source files
 
         Usage:
           mutate4net <file.cs> [options]
+          mutate4net <project.csproj|directory> --all-files [options]
           mutate4net --help
 
         Options:
+          --all-files               Run scan/update/mutation across all production files in a project.
           --scan                    Print mutation sites without running tests.
           --update-manifest         Refresh the embedded mutate4net manifest.
           --reuse-coverage          Reuse existing coverage data.

@@ -55,6 +55,43 @@ public sealed class CliArgumentsParserTests
     }
 
     [Fact]
+    public void Parse_ReadsAllFilesProjectTarget()
+    {
+        using var sample = SampleFile.Create("class Sample { }");
+        string project = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(sample.Path)!, "Sample.csproj");
+        File.WriteAllText(project, """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+
+        ParseOutcome outcome = new CliArgumentsParser().Parse([project, "--all-files", "--scan"]);
+
+        Assert.True(outcome.IsSuccess);
+        Assert.NotNull(outcome.Arguments);
+        Assert.True(outcome.Arguments.AllFiles);
+        Assert.Equal(CliMode.Scan, outcome.Arguments.Mode);
+        Assert.Equal(System.IO.Path.GetFullPath(project), outcome.Arguments.TargetFile);
+    }
+
+    [Fact]
+    public void Parse_RejectsAllFilesWithLines()
+    {
+        using var sample = SampleFile.Create("class Sample { }");
+        string project = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(sample.Path)!, "Sample.csproj");
+        File.WriteAllText(project, """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+
+        ParseOutcome outcome = new CliArgumentsParser().Parse([project, "--all-files", "--lines", "3"]);
+
+        Assert.False(outcome.IsSuccess);
+        Assert.Contains("--all-files may not be combined with --lines", outcome.ErrorMessage);
+    }
+
+    [Fact]
     public void Parse_ReadsTestProjectSelection()
     {
         using var sample = SampleFile.Create("class Sample { }");

@@ -85,6 +85,26 @@ public sealed class ProjectDiscovery
             FindNearestSolution(new DirectoryInfo(projectDirectory)));
     }
 
+    private static ProjectInfo CreateProjectInfo(string fullProject)
+    {
+        if (!File.Exists(fullProject))
+        {
+            throw new FileNotFoundException($"Project file does not exist: {fullProject}");
+        }
+
+        if (IsTestProject(fullProject))
+        {
+            throw new InvalidOperationException($"Mutation targets in test projects are not supported: {fullProject}");
+        }
+
+        string projectDirectory = Path.GetDirectoryName(fullProject)!;
+        return new ProjectInfo(
+            fullProject,
+            projectDirectory,
+            IsTestProject: false,
+            FindNearestSolution(new DirectoryInfo(projectDirectory)));
+    }
+
     public IReadOnlyList<string> DiscoverTestProjects(string moduleRoot)
     {
         string fullRoot = Path.GetFullPath(moduleRoot);
@@ -94,6 +114,51 @@ public sealed class ProjectDiscovery
             .Where(IsTestProject)
             .OrderBy(project => project, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    public ProjectSourceSet DiscoverProjectSources(string targetPath, string? projectFile = null)
+    {
+        string fullTarget = Path.GetFullPath(targetPath);
+        ProjectInfo project = ResolveProjectForSourceDiscovery(fullTarget, projectFile);
+        IReadOnlyList<string> sourceFiles = SourceFilesForProject(project.ProjectFile);
+        return new ProjectSourceSet(project, sourceFiles);
+    }
+
+    private ProjectInfo ResolveProjectForSourceDiscovery(string fullTarget, string? projectFile)
+    {
+        if (!string.IsNullOrWhiteSpace(projectFile))
+        {
+            return CreateProjectInfo(Path.GetFullPath(projectFile));
+        }
+
+        if (File.Exists(fullTarget) &&
+            string.Equals(Path.GetExtension(fullTarget), ".csproj", StringComparison.OrdinalIgnoreCase))
+        {
+            return CreateProjectInfo(fullTarget);
+        }
+
+        if (File.Exists(fullTarget) &&
+            string.Equals(Path.GetExtension(fullTarget), ".cs", StringComparison.OrdinalIgnoreCase))
+        {
+            return Discover(fullTarget) ??
+                throw new InvalidOperationException($"No project includes {fullTarget}.");
+        }
+
+        if (Directory.Exists(fullTarget))
+        {
+            ProjectInfo[] projects = Directory.EnumerateFiles(fullTarget, "*.csproj", SearchOption.TopDirectoryOnly)
+                .Where(project => !IsTestProject(project))
+                .Select(project => CreateProjectInfo(Path.GetFullPath(project)))
+                .ToArray();
+            return projects.Length switch
+            {
+                1 => projects[0],
+                0 => throw new InvalidOperationException($"No production .csproj file was found in {fullTarget}. Use --project to select one."),
+                _ => throw new InvalidOperationException($"Multiple production .csproj files were found in {fullTarget}. Use --project to select one.")
+            };
+        }
+
+        throw new InvalidOperationException($"All-files target was not found: {fullTarget}");
     }
 
     private static IEnumerable<ProjectInfo> CandidateProjects(string sourceFile)
@@ -142,6 +207,49 @@ public sealed class ProjectDiscovery
 
         return Descendants(root, "Compile")
             .Any(element => MatchesItem(element.Attribute("Include")?.Value, relative));
+    }
+
+    private static IReadOnlyList<string> SourceFilesForProject(string projectFile)
+    {
+        string projectDirectory = Path.GetDirectoryName(projectFile)!;
+        XDocument document = XDocument.Load(projectFile, LoadOptions.None);
+        XElement root = document.Root ?? throw new InvalidOperationException($"Invalid project file: {projectFile}");
+
+        string[] removes = Descendants(root, "Compile")
+            .Select(element => element.Attribute("Remove")?.Value)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!)
+            .ToArray();
+        string[] includes = Descendants(root, "Compile")
+            .Select(element => element.Attribute("Include")?.Value)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!)
+            .ToArray();
+        bool defaultCompileItems = !Descendants(root, "EnableDefaultCompileItems")
+            .Any(element => string.Equals(element.Value.Trim(), "false", StringComparison.OrdinalIgnoreCase));
+
+        return Directory.EnumerateFiles(projectDirectory, "*.cs", SearchOption.AllDirectories)
+            .Where(source => IncludesSourceCandidate(projectDirectory, source, defaultCompileItems, includes, removes))
+            .OrderBy(source => source, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool IncludesSourceCandidate(
+        string projectDirectory,
+        string sourceFile,
+        bool defaultCompileItems,
+        IReadOnlyList<string> includes,
+        IReadOnlyList<string> removes)
+    {
+        string relative = NormalizePath(Path.GetRelativePath(projectDirectory, sourceFile));
+        if (IsUnderDefaultExcludedDirectory(relative) ||
+            removes.Any(remove => MatchesItem(remove, relative)))
+        {
+            return false;
+        }
+
+        return defaultCompileItems ||
+            includes.Any(include => MatchesItem(include, relative));
     }
 
     private static bool IsTestProject(string projectFile)

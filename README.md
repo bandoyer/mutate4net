@@ -1,8 +1,8 @@
 # mutate4net
 
-`mutate4net` is a single-file mutation tester for C# projects, ported from the mutate4java workflow.
+`mutate4net` is a mutation tester for C# projects, ported from the mutate4java workflow.
 
-It is intentionally narrow: point it at one production `.cs` file, let it discover safe mutation sites with Roslyn, run tests, and report killed, survived, timed-out, and uncovered mutants.
+It is intentionally narrow by default: point it at one production `.cs` file, let it discover safe mutation sites with Roslyn, run tests, and report killed, survived, timed-out, and uncovered mutants. Use `--all-files` to orchestrate the same workflow across every production `.cs` file in a project.
 
 ## Current Status
 
@@ -21,6 +21,7 @@ Implemented:
 - Explicit test project selection and exclusion.
 - Structured VSTest filters with zero-test detection.
 - Mutator metadata and include/exclude mutator filters.
+- Whole-project source orchestration with `--all-files`.
 - Richer expression mutators for string literals/methods, numeric literals, boolean and guard/filter conditions, return and lambda values, argument defaults, async/Task behavior, throw flow, coalescing expressions, collection/object initializers, checked contexts, arithmetic/bitwise operators, pattern negation, switch expressions, compound assignments, increment/decrement operators, conditional branches, selected LINQ calls, and conservative statement/block removal.
 
 Still maturing:
@@ -66,6 +67,7 @@ dotnet tool run mutate4net -- --version
 dotnet run --project src/Mutate4Net/Mutate4Net.csproj -- path/to/File.cs --scan
 dotnet run --project src/Mutate4Net/Mutate4Net.csproj -- path/to/File.cs --update-manifest
 dotnet run --project src/Mutate4Net/Mutate4Net.csproj -- path/to/File.cs
+dotnet run --project src/Mutate4Net/Mutate4Net.csproj -- path/to/App.csproj --all-files --scan
 dotnet run --project src/Mutate4Net/Mutate4Net.csproj -- --version
 ```
 
@@ -88,6 +90,16 @@ Run mutation testing:
 ```powershell
 mutate4net path/to/File.cs
 ```
+
+Run across every production source file in a project:
+
+```powershell
+mutate4net path/to/App.csproj --all-files --scan
+mutate4net path/to/App.csproj --all-files
+mutate4net path/to/project-directory --all-files --project path/to/App.csproj
+```
+
+All-files runs execute the same per-file workflow sequentially and section the output by source file. `--lines` is not available with `--all-files`.
 
 Restrict to specific source lines:
 
