@@ -21,7 +21,7 @@ Implemented:
 - Explicit test project selection and exclusion.
 - Structured VSTest filters with zero-test detection.
 - Mutator metadata and include/exclude mutator filters.
-- Richer expression mutators for string literals/methods, numeric literals, boolean and guard/filter conditions, return and lambda values, coalescing expressions, collection/object initializers, checked contexts, arithmetic/bitwise operators, pattern negation, switch expressions, compound assignments, increment/decrement operators, conditional branches, selected LINQ calls, and conservative statement removal.
+- Richer expression mutators for string literals/methods, numeric literals, boolean and guard/filter conditions, return and lambda values, throw flow, coalescing expressions, collection/object initializers, checked contexts, arithmetic/bitwise operators, pattern negation, switch expressions, compound assignments, increment/decrement operators, conditional branches, selected LINQ calls, and conservative statement removal.
 
 Still maturing:
 
@@ -104,7 +104,7 @@ mutate4net path/to/File.cs --mutator boolean,logical
 mutate4net path/to/File.cs --exclude-mutator null
 ```
 
-Mutator-filtered runs are treated as partial smoke checks and do not update the embedded manifest. Current mutator categories include `arithmetic`, `assignment`, `boolean`, `checked`, `coalescing`, `collection`, `conditional`, `equality`, `linq`, `literal`, `logical`, `null`, `object`, `pattern`, `return`, `statement`, `string`, `switch`, `unary`, and `update`.
+Mutator-filtered runs are treated as partial smoke checks and do not update the embedded manifest. Current mutator categories include `arithmetic`, `assignment`, `boolean`, `checked`, `coalescing`, `collection`, `conditional`, `equality`, `exception`, `linq`, `literal`, `logical`, `null`, `object`, `pattern`, `return`, `statement`, `string`, `switch`, `unary`, and `update`.
 
 Ignore the manifest and test all discovered sites:
 

@@ -963,6 +963,121 @@ public sealed class MutationCatalogTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_DiscoversThrowFlowMutators()
+    {
+        const string source = """
+            using System;
+
+            class Sample
+            {
+                string Require(string value)
+                {
+                    if (value is null)
+                    {
+                        throw new ArgumentNullException(nameof(value));
+                    }
+
+                    return value;
+                }
+
+                string Coalesce(string? value) => value ?? throw new InvalidOperationException();
+
+                int Missing() => throw new NotSupportedException();
+
+                void Rethrow()
+                {
+                    try
+                    {
+                        Throw();
+                    }
+                    catch (Exception)
+                    {
+                        throw;
+                    }
+                }
+
+                void Throw()
+                {
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "exception",
+            MutatorId: "throw-statement",
+            Original: "throw new ArgumentNullException(nameof(value));",
+            Replacement: ""
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "exception",
+            MutatorId: "throw-exception",
+            Original: "new ArgumentNullException(nameof(value))",
+            Replacement: "null"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "exception",
+            MutatorId: "throw-expression",
+            Original: "throw new InvalidOperationException()",
+            Replacement: "default"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "exception",
+            MutatorId: "throw-expression",
+            Original: "throw new NotSupportedException()",
+            Replacement: "default"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "exception",
+            MutatorId: "throw-statement",
+            Original: "throw;",
+            Replacement: ""
+        });
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_DoesNotRemoveEmbeddedThrowStatements()
+    {
+        const string source = """
+            using System;
+
+            class Sample
+            {
+                string Require(string value)
+                {
+                    if (value is null)
+                        throw new ArgumentNullException(nameof(value));
+
+                    return value;
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.DoesNotContain(analysis.Sites, site => site is
+        {
+            Category: "exception",
+            MutatorId: "throw-statement"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "exception",
+            MutatorId: "throw-exception",
+            Original: "new ArgumentNullException(nameof(value))",
+            Replacement: "null"
+        });
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_DiscoversSupportedLinqMethodMutators()
     {
         const string source = """

@@ -278,6 +278,20 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         base.VisitExpressionStatement(node);
     }
 
+    public override void VisitThrowStatement(ThrowStatementSyntax node)
+    {
+        AddThrowStatementRemoval(node);
+        AddThrownExceptionReplacement(node.Expression);
+        base.VisitThrowStatement(node);
+    }
+
+    public override void VisitThrowExpression(ThrowExpressionSyntax node)
+    {
+        AddThrowExpressionDefaultReplacement(node);
+        AddThrownExceptionReplacement(node.Expression);
+        base.VisitThrowExpression(node);
+    }
+
     public override void VisitInitializerExpression(InitializerExpressionSyntax node)
     {
         AddObjectInitializerMemberRemoval(node);
@@ -610,6 +624,57 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         AddSite(expression, expression.Span, original, "null", "replace " + original + " with null", "null-replacement", "null");
     }
 
+    private void AddThrowStatementRemoval(ThrowStatementSyntax node)
+    {
+        if (node.Parent is not BlockSyntax)
+        {
+            return;
+        }
+
+        string original = _source[node.Span.Start..node.Span.End];
+        AddSite(
+            node,
+            node.Span,
+            original,
+            string.Empty,
+            "remove throw statement",
+            "throw-statement",
+            "exception");
+    }
+
+    private void AddThrowExpressionDefaultReplacement(ThrowExpressionSyntax node)
+    {
+        string original = _source[node.Span.Start..node.Span.End];
+        AddSite(
+            node,
+            node.Span,
+            original,
+            "default",
+            "replace throw expression with default",
+            "throw-expression",
+            "exception");
+    }
+
+    private void AddThrownExceptionReplacement(ExpressionSyntax? expression)
+    {
+        if (expression is null ||
+            expression.IsKind(SyntaxKind.NullLiteralExpression) ||
+            !IsException(expression))
+        {
+            return;
+        }
+
+        string original = _source[expression.Span.Start..expression.Span.End];
+        AddSite(
+            expression,
+            expression.Span,
+            original,
+            "null",
+            "replace thrown exception with null",
+            "throw-exception",
+            "exception");
+    }
+
     private void AddSite(
         SyntaxNode node,
         TextSpan span,
@@ -763,6 +828,27 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         }
 
         return type.IsReferenceType || type.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T;
+    }
+
+    private bool IsException(ExpressionSyntax expression)
+    {
+        TypeInfo typeInfo = _semanticModel.GetTypeInfo(expression);
+        ITypeSymbol? type = typeInfo.ConvertedType ?? typeInfo.Type;
+        INamedTypeSymbol? exceptionType = _semanticModel.Compilation.GetTypeByMetadataName("System.Exception");
+        if (exceptionType is null)
+        {
+            return false;
+        }
+
+        for (ITypeSymbol? current = type; current is not null; current = current.BaseType)
+        {
+            if (SymbolEqualityComparer.Default.Equals(current, exceptionType))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsNumericType(ITypeSymbol type) => type.SpecialType is
