@@ -32,9 +32,19 @@ public sealed class ExecutionMessages
             extra.Append("Selected test projects: ").Append(string.Join(", ", arguments.TestProjects)).Append('\n');
         }
 
+        if (arguments.TestRunner == TestRunner.MicrosoftTestingPlatform)
+        {
+            extra.Append("Test runner: mtp\n");
+        }
+
         if (!string.IsNullOrWhiteSpace(arguments.TestFilter))
         {
             extra.Append("Test filter: ").Append(arguments.TestFilter).Append('\n');
+        }
+
+        if (arguments.MtpFilterClasses.Count > 0)
+        {
+            extra.Append("MTP filter classes: ").Append(string.Join(", ", arguments.MtpFilterClasses)).Append('\n');
         }
 
         if (arguments.ExcludedTestProjects.Count > 0)

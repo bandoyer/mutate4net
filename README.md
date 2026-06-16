@@ -148,6 +148,12 @@ Prefer `--test-filter` when you only need a VSTest filter. mutate4net keeps the 
 mutate4net path/to/File.cs --test-project tests/App.Unit/App.Unit.csproj --test-filter "FullyQualifiedName~CalculatorTests"
 ```
 
+For an MTP-ready xUnit v3 test project, opt into the MTP command shape explicitly. MTP mode currently requires a reusable coverage report and uses xUnit's MTP filter options instead of VSTest filter expressions:
+
+```powershell
+mutate4net path/to/File.cs --reuse-coverage --test-runner mtp --test-project tests/App.Unit/App.Unit.csproj --mtp-filter-class CalculatorTests
+```
+
 Run only selected test projects while still generating coverage:
 
 ```powershell
@@ -181,6 +187,8 @@ If the report exists, uncovered mutation sites are reported and skipped. If cove
 For many projects this means the test project should reference either `coverlet.msbuild` or `coverlet.collector`.
 
 If `dotnet test` reports that a command ran zero tests, mutate4net treats that as a failed test command. This prevents empty filters from appearing as survived mutants.
+
+MTP mode currently requires `--reuse-coverage`; generate or reuse a Cobertura report before running mutations with `--test-runner mtp`.
 
 ## Worker Copy Tuning
 

@@ -1,3 +1,4 @@
+using Mutate4Net.Cli;
 using Mutate4Net.Execution;
 using Mutate4Net.ProjectSystem;
 
@@ -357,6 +358,45 @@ public sealed class ProjectDiscoveryTests
 
         Assert.Single(command.Commands);
         Assert.Equal(["dotnet", "test", unit, "--filter", "FullyQualifiedName~CalculatorTests"], command.Command);
+    }
+
+    [Fact]
+    public void TestCommandFactory_BuildsMtpCommandWithClassFilters()
+    {
+        using var workspace = ProjectWorkspace.Create();
+        workspace.Write("App.sln", string.Empty);
+        workspace.Write("src/App/App.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        string unit = workspace.Write("tests/App.Unit/App.Unit.csproj", TestProjectXml());
+        string source = workspace.Write("src/App/Calculator.cs", "class Calculator { }");
+
+        TestCommand command = new TestCommandFactory().Create(
+            source,
+            projectFile: null,
+            customCommand: null,
+            testProjects: ["tests/App.Unit/App.Unit.csproj"],
+            excludedTestProjects: [],
+            testFilter: null,
+            testRunner: TestRunner.MicrosoftTestingPlatform,
+            mtpFilterClasses: ["CalculatorTests", "OtherTests"],
+            noRestore: true);
+
+        Assert.Single(command.Commands);
+        Assert.Equal([
+            "dotnet",
+            "test",
+            "--project",
+            unit,
+            "--no-restore",
+            "--filter-class",
+            "CalculatorTests",
+            "OtherTests",
+            "--minimum-expected-tests",
+            "1"
+        ], command.Command);
     }
 
     private static string TestProjectXml() =>

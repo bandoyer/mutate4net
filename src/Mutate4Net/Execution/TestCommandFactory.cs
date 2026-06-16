@@ -25,6 +25,8 @@ public sealed class TestCommandFactory
             arguments.TestProjects,
             arguments.ExcludedTestProjects,
             arguments.TestFilter,
+            arguments.TestRunner,
+            arguments.MtpFilterClasses,
             noRestore);
 
     public TestCommand Create(string sourceFile, string? customCommand)
@@ -49,6 +51,8 @@ public sealed class TestCommandFactory
         IReadOnlyList<string> testProjects,
         IReadOnlyList<string> excludedTestProjects,
         string? testFilter = null,
+        TestRunner testRunner = TestRunner.VsTest,
+        IReadOnlyList<string>? mtpFilterClasses = null,
         bool noRestore = false)
     {
         ProjectInfo? project = _projectDiscovery.Discover(sourceFile, projectFile);
@@ -67,21 +71,32 @@ public sealed class TestCommandFactory
         if (selectedTestProjects.Count > 0)
         {
             return new TestCommand(
-                selectedTestProjects.Select(testProject => DotNetTestCommand(testProject, testFilter, noRestore)).ToArray(),
+                selectedTestProjects
+                    .Select(testProject => DotNetTestCommand(testProject, testFilter, testRunner, mtpFilterClasses ?? [], noRestore))
+                    .ToArray(),
                 workingDirectory);
         }
 
         if (project is null)
         {
-            return new TestCommand(DotNetTestCommand(testTarget: null, testFilter, noRestore), workingDirectory);
+            return new TestCommand(
+                DotNetTestCommand(testTarget: null, testFilter, testRunner, mtpFilterClasses ?? [], noRestore),
+                workingDirectory);
         }
 
         string testTarget = project.SolutionFile ?? project.ProjectFile;
-        return new TestCommand(DotNetTestCommand(testTarget, testFilter, noRestore), workingDirectory);
+        return new TestCommand(
+            DotNetTestCommand(testTarget, testFilter, testRunner, mtpFilterClasses ?? [], noRestore),
+            workingDirectory);
     }
 
     public TestCommand CreateCoverageCommand(CliArguments arguments, string coverageOutputPrefix)
     {
+        if (arguments.TestRunner == TestRunner.MicrosoftTestingPlatform)
+        {
+            throw new InvalidOperationException("MTP coverage generation is not supported yet; use --reuse-coverage with existing coverage.");
+        }
+
         TestCommand baseline = Create(
             arguments.TargetFile,
             arguments.ProjectFile,
@@ -105,6 +120,11 @@ public sealed class TestCommandFactory
 
     public TestCommand CreateCollectorCoverageCommand(CliArguments arguments, string resultsDirectory)
     {
+        if (arguments.TestRunner == TestRunner.MicrosoftTestingPlatform)
+        {
+            throw new InvalidOperationException("MTP collector coverage is not supported yet; use --reuse-coverage with existing coverage.");
+        }
+
         TestCommand baseline = Create(
             arguments.TargetFile,
             arguments.ProjectFile,
@@ -187,10 +207,20 @@ public sealed class TestCommandFactory
         return ["/bin/sh", "-c", command];
     }
 
-    private static IReadOnlyList<string> DotNetTestCommand(string? testTarget, string? testFilter, bool noRestore)
+    private static IReadOnlyList<string> DotNetTestCommand(
+        string? testTarget,
+        string? testFilter,
+        TestRunner testRunner,
+        IReadOnlyList<string> mtpFilterClasses,
+        bool noRestore)
     {
         var command = new List<string> { "dotnet", "test" };
-        if (!string.IsNullOrWhiteSpace(testTarget))
+        if (!string.IsNullOrWhiteSpace(testTarget) && testRunner == TestRunner.MicrosoftTestingPlatform)
+        {
+            command.Add(IsSolutionPath(testTarget) ? "--solution" : "--project");
+            command.Add(testTarget);
+        }
+        else if (!string.IsNullOrWhiteSpace(testTarget))
         {
             command.Add(testTarget);
         }
@@ -200,7 +230,18 @@ public sealed class TestCommandFactory
             command.Add("--no-restore");
         }
 
-        if (!string.IsNullOrWhiteSpace(testFilter))
+        if (testRunner == TestRunner.MicrosoftTestingPlatform)
+        {
+            if (mtpFilterClasses.Count > 0)
+            {
+                command.Add("--filter-class");
+                command.AddRange(mtpFilterClasses);
+            }
+
+            command.Add("--minimum-expected-tests");
+            command.Add("1");
+        }
+        else if (!string.IsNullOrWhiteSpace(testFilter))
         {
             command.Add("--filter");
             command.Add(testFilter);
@@ -208,6 +249,10 @@ public sealed class TestCommandFactory
 
         return command;
     }
+
+    private static bool IsSolutionPath(string path) =>
+        string.Equals(Path.GetExtension(path), ".sln", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(Path.GetExtension(path), ".slnx", StringComparison.OrdinalIgnoreCase);
 
     private static string WorkingDirectory(ProjectInfo project) =>
         project.SolutionFile is null

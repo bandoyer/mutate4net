@@ -131,6 +131,92 @@ public sealed class CliArgumentsParserTests
     }
 
     [Fact]
+    public void Parse_ReadsMtpRunnerAndClassFilters()
+    {
+        using var sample = SampleFile.Create("class Sample { }");
+
+        ParseOutcome outcome = new CliArgumentsParser().Parse([
+            sample.Path,
+            "--reuse-coverage",
+            "--test-runner",
+            "mtp",
+            "--mtp-filter-class",
+            "CalculatorTests",
+            "--mtp-filter-class",
+            "OtherTests"
+        ]);
+
+        Assert.True(outcome.IsSuccess);
+        Assert.NotNull(outcome.Arguments);
+        Assert.Equal(TestRunner.MicrosoftTestingPlatform, outcome.Arguments.TestRunner);
+        Assert.Equal(["CalculatorTests", "OtherTests"], outcome.Arguments.MtpFilterClasses);
+    }
+
+    [Fact]
+    public void Parse_RejectsMtpRunnerWithoutReuseCoverage()
+    {
+        using var sample = SampleFile.Create("class Sample { }");
+
+        ParseOutcome outcome = new CliArgumentsParser().Parse([
+            sample.Path,
+            "--test-runner",
+            "mtp"
+        ]);
+
+        Assert.False(outcome.IsSuccess);
+        Assert.Contains("--test-runner mtp currently requires --reuse-coverage", outcome.ErrorMessage);
+    }
+
+    [Fact]
+    public void Parse_RejectsMtpFilterWithoutMtpRunner()
+    {
+        using var sample = SampleFile.Create("class Sample { }");
+
+        ParseOutcome outcome = new CliArgumentsParser().Parse([
+            sample.Path,
+            "--reuse-coverage",
+            "--mtp-filter-class",
+            "CalculatorTests"
+        ]);
+
+        Assert.False(outcome.IsSuccess);
+        Assert.Contains("--mtp-filter-class requires --test-runner mtp", outcome.ErrorMessage);
+    }
+
+    [Fact]
+    public void Parse_RejectsVstestFilterWithMtpRunner()
+    {
+        using var sample = SampleFile.Create("class Sample { }");
+
+        ParseOutcome outcome = new CliArgumentsParser().Parse([
+            sample.Path,
+            "--reuse-coverage",
+            "--test-runner",
+            "mtp",
+            "--test-filter",
+            "FullyQualifiedName~CalculatorTests"
+        ]);
+
+        Assert.False(outcome.IsSuccess);
+        Assert.Contains("--test-filter uses VSTest syntax", outcome.ErrorMessage);
+    }
+
+    [Fact]
+    public void Parse_RejectsInvalidTestRunner()
+    {
+        using var sample = SampleFile.Create("class Sample { }");
+
+        ParseOutcome outcome = new CliArgumentsParser().Parse([
+            sample.Path,
+            "--test-runner",
+            "other"
+        ]);
+
+        Assert.False(outcome.IsSuccess);
+        Assert.Contains("--test-runner must be 'vstest' or 'mtp'", outcome.ErrorMessage);
+    }
+
+    [Fact]
     public void Parse_ReadsMutatorFilters()
     {
         using var sample = SampleFile.Create("class Sample { }");

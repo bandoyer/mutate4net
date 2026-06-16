@@ -18,4 +18,9 @@ public sealed record CliArguments(
     IReadOnlyList<string> ExcludedTestProjects,
     IReadOnlySet<string> IncludedMutators,
     IReadOnlySet<string> ExcludedMutators,
-    bool AllFiles = false);
+    bool AllFiles = false)
+{
+    public TestRunner TestRunner { get; init; } = TestRunner.VsTest;
+
+    public IReadOnlyList<string> MtpFilterClasses { get; init; } = Array.Empty<string>();
+}

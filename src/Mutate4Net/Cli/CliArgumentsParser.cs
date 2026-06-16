@@ -24,8 +24,10 @@ public sealed class CliArgumentsParser
         string? projectFile = null;
         string? testCommand = null;
         string? testFilter = null;
+        TestRunner testRunner = TestRunner.VsTest;
         var testProjects = new List<string>();
         var excludedTestProjects = new List<string>();
+        var mtpFilterClasses = new List<string>();
         var includedMutators = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         var excludedMutators = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -128,6 +130,31 @@ public sealed class CliArgumentsParser
                         return ParseOutcome.Error("--test-filter requires a non-empty value.");
                     }
 
+                    break;
+                case "--test-runner":
+                    if (!TryReadValue(args, ref i, arg, out string? runnerValue, out ParseOutcome? runnerError))
+                    {
+                        return runnerError!;
+                    }
+
+                    if (!TryParseTestRunner(runnerValue, out testRunner))
+                    {
+                        return ParseOutcome.Error("--test-runner must be 'vstest' or 'mtp'.");
+                    }
+
+                    break;
+                case "--mtp-filter-class":
+                    if (!TryReadValue(args, ref i, arg, out string? mtpFilterClass, out ParseOutcome? mtpFilterClassError))
+                    {
+                        return mtpFilterClassError!;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(mtpFilterClass))
+                    {
+                        return ParseOutcome.Error("--mtp-filter-class requires a non-empty value.");
+                    }
+
+                    mtpFilterClasses.Add(mtpFilterClass);
                     break;
                 case "--test-project":
                     if (!TryReadValue(args, ref i, arg, out string? testProject, out ParseOutcome? testProjectError))
@@ -248,6 +275,8 @@ public sealed class CliArgumentsParser
             mutateAll,
             !string.IsNullOrWhiteSpace(testCommand),
             !string.IsNullOrWhiteSpace(testFilter),
+            testRunner,
+            mtpFilterClasses.Count > 0,
             testProjects.Count > 0,
             excludedTestProjects.Count > 0,
             includedMutators.Count > 0 || excludedMutators.Count > 0);
@@ -275,7 +304,11 @@ public sealed class CliArgumentsParser
             excludedTestProjects,
             includedMutators,
             excludedMutators,
-            allFiles);
+            allFiles)
+        {
+            TestRunner = testRunner,
+            MtpFilterClasses = mtpFilterClasses.ToArray()
+        };
 
         return ParseOutcome.Success(parsed);
     }
@@ -376,6 +409,25 @@ public sealed class CliArgumentsParser
         return true;
     }
 
+    private static bool TryParseTestRunner(string raw, out TestRunner testRunner)
+    {
+        if (string.Equals(raw, "vstest", StringComparison.OrdinalIgnoreCase))
+        {
+            testRunner = TestRunner.VsTest;
+            return true;
+        }
+
+        if (string.Equals(raw, "mtp", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(raw, "microsoft-testing-platform", StringComparison.OrdinalIgnoreCase))
+        {
+            testRunner = TestRunner.MicrosoftTestingPlatform;
+            return true;
+        }
+
+        testRunner = TestRunner.VsTest;
+        return false;
+    }
+
     private static string? FindConflict(
         bool scan,
         bool updateManifest,
@@ -386,6 +438,8 @@ public sealed class CliArgumentsParser
         bool mutateAll,
         bool hasTestCommand,
         bool hasTestFilter,
+        TestRunner testRunner,
+        bool hasMtpFilters,
         bool hasTestProjects,
         bool hasExcludedTestProjects,
         bool hasMutatorFilters)
@@ -423,6 +477,11 @@ public sealed class CliArgumentsParser
         if (scan && hasTestFilter)
         {
             return "--scan may not be combined with --test-filter.";
+        }
+
+        if (scan && hasMtpFilters)
+        {
+            return "--scan may not be combined with MTP filters.";
         }
 
         if (hasLines && sinceLastRun)
@@ -470,6 +529,11 @@ public sealed class CliArgumentsParser
             return "--update-manifest may not be combined with --test-filter.";
         }
 
+        if (updateManifest && hasMtpFilters)
+        {
+            return "--update-manifest may not be combined with MTP filters.";
+        }
+
         if (updateManifest && hasMutatorFilters)
         {
             return "--update-manifest may not be combined with mutator filters.";
@@ -483,6 +547,31 @@ public sealed class CliArgumentsParser
         if (hasTestCommand && hasTestFilter)
         {
             return "--test-command may not be combined with --test-filter.";
+        }
+
+        if (hasTestCommand && testRunner != TestRunner.VsTest)
+        {
+            return "--test-runner only applies to generated commands and may not be combined with --test-command.";
+        }
+
+        if (hasTestCommand && hasMtpFilters)
+        {
+            return "--test-command may not be combined with MTP filters.";
+        }
+
+        if (testRunner == TestRunner.VsTest && hasMtpFilters)
+        {
+            return "--mtp-filter-class requires --test-runner mtp.";
+        }
+
+        if (testRunner == TestRunner.MicrosoftTestingPlatform && hasTestFilter)
+        {
+            return "--test-filter uses VSTest syntax; use --mtp-filter-class with --test-runner mtp.";
+        }
+
+        if (testRunner == TestRunner.MicrosoftTestingPlatform && !reuseCoverage)
+        {
+            return "--test-runner mtp currently requires --reuse-coverage.";
         }
 
         return null;
