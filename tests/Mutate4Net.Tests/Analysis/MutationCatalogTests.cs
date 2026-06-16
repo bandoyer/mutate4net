@@ -843,6 +843,126 @@ public sealed class MutationCatalogTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_DiscoversLambdaExpressionMutators()
+    {
+        const string source = """
+            using System.Linq;
+
+            class Sample
+            {
+                bool AnyPositive(int[] values)
+                {
+                    return values.Any(value => value > 0);
+                }
+
+                int SumNext(int[] values)
+                {
+                    return values.Select(value => value + 1).Sum();
+                }
+
+                string Normalize(string[] values)
+                {
+                    return values.Select(value => value.Trim()).First();
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "return",
+            MutatorId: "return-value",
+            Original: "value > 0",
+            Replacement: "true"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "return",
+            MutatorId: "return-value",
+            Original: "value > 0",
+            Replacement: "false"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "return",
+            MutatorId: "return-value",
+            Original: "value + 1",
+            Replacement: "0"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "return",
+            MutatorId: "return-value",
+            Original: "value.Trim()",
+            Replacement: "\"\""
+        });
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_DiscoversGuardConditionMutators()
+    {
+        const string source = """
+            class Sample
+            {
+                string Label(int value) => value switch
+                {
+                    0 when value == 0 => "zero",
+                    > 0 when value < 10 => "small",
+                    _ => "many"
+                };
+
+                bool Catches(System.Exception exception)
+                {
+                    try
+                    {
+                        throw exception;
+                    }
+                    catch (System.Exception ex) when (ex.Message.Length > 0)
+                    {
+                        return true;
+                    }
+
+                    return false;
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "boolean",
+            MutatorId: "boolean-condition",
+            Original: "value == 0",
+            Replacement: "true"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "boolean",
+            MutatorId: "boolean-condition",
+            Original: "value < 10",
+            Replacement: "false"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "boolean",
+            MutatorId: "boolean-condition",
+            Original: "ex.Message.Length > 0",
+            Replacement: "true"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "boolean",
+            MutatorId: "boolean-condition",
+            Original: "ex.Message.Length > 0",
+            Replacement: "false"
+        });
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_DiscoversSupportedLinqMethodMutators()
     {
         const string source = """

@@ -21,7 +21,7 @@ Implemented:
 - Explicit test project selection and exclusion.
 - Structured VSTest filters with zero-test detection.
 - Mutator metadata and include/exclude mutator filters.
-- Richer expression mutators for string literals/methods, numeric literals, boolean conditions, return values, coalescing expressions, collection/object initializers, checked contexts, arithmetic/bitwise operators, pattern negation, switch expressions, compound assignments, increment/decrement operators, conditional branches, selected LINQ calls, and conservative statement removal.
+- Richer expression mutators for string literals/methods, numeric literals, boolean and guard/filter conditions, return and lambda values, coalescing expressions, collection/object initializers, checked contexts, arithmetic/bitwise operators, pattern negation, switch expressions, compound assignments, increment/decrement operators, conditional branches, selected LINQ calls, and conservative statement removal.
 
 Still maturing:
 

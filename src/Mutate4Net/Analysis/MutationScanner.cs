@@ -216,6 +216,18 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         base.VisitForStatement(node);
     }
 
+    public override void VisitWhenClause(WhenClauseSyntax node)
+    {
+        AddBooleanConditionReplacement(node.Condition);
+        base.VisitWhenClause(node);
+    }
+
+    public override void VisitCatchFilterClause(CatchFilterClauseSyntax node)
+    {
+        AddBooleanConditionReplacement(node.FilterExpression);
+        base.VisitCatchFilterClause(node);
+    }
+
     public override void VisitConditionalExpression(ConditionalExpressionSyntax node)
     {
         AddBooleanConditionReplacement(node.Condition);
@@ -303,6 +315,20 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         AddReturnValueReplacement(node.Expression);
         AddNullReplacement(node.Expression);
         base.VisitArrowExpressionClause(node);
+    }
+
+    public override void VisitSimpleLambdaExpression(SimpleLambdaExpressionSyntax node)
+    {
+        AddReturnValueReplacement(node.ExpressionBody);
+        AddNullReplacement(node.ExpressionBody);
+        base.VisitSimpleLambdaExpression(node);
+    }
+
+    public override void VisitParenthesizedLambdaExpression(ParenthesizedLambdaExpressionSyntax node)
+    {
+        AddReturnValueReplacement(node.ExpressionBody);
+        AddNullReplacement(node.ExpressionBody);
+        base.VisitParenthesizedLambdaExpression(node);
     }
 
     public override void VisitVariableDeclarator(VariableDeclaratorSyntax node)
