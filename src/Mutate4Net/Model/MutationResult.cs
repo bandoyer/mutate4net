@@ -6,5 +6,5 @@ public sealed record MutationResult(
     long DurationMillis,
     bool TimedOut,
     int Order,
-    int TotalJobs);
-
+    int TotalJobs,
+    string? FailureOutput = null);

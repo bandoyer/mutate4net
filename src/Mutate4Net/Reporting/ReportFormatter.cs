@@ -67,7 +67,34 @@ public sealed class ReportFormatter
             {
                 builder.Append("  timed out\n");
             }
+
+            AppendFailureOutput(result.FailureOutput, builder);
         }
+    }
+
+    private static void AppendFailureOutput(string? failureOutput, StringBuilder builder)
+    {
+        if (string.IsNullOrWhiteSpace(failureOutput))
+        {
+            return;
+        }
+
+        builder.Append("  output:\n");
+        foreach (string line in Truncate(failureOutput.Trim(), 4_000)
+                     .Split(Environment.NewLine, StringSplitOptions.None))
+        {
+            builder.Append("    ").Append(line).Append('\n');
+        }
+    }
+
+    private static string Truncate(string value, int maxLength)
+    {
+        if (value.Length <= maxLength)
+        {
+            return value;
+        }
+
+        return value[..maxLength] + "\n    ... output truncated ...";
     }
 
     private static void AppendSummary(

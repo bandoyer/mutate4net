@@ -19,9 +19,13 @@ public sealed class WorkerWorkspaceManager
         ".cache",
         ".next",
         ".angular",
-        "logs",
         "StrykerOutput",
         "tmp"
+    };
+
+    private static readonly HashSet<string> RootOnlyExcludedDirectories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "logs"
     };
 
     public WorkerWorkspace Create(string moduleRoot, string sourceFile)
@@ -69,7 +73,7 @@ public sealed class WorkerWorkspaceManager
         {
             string name = Path.GetFileName(directory);
             string relativePath = NormalizePath(Path.GetRelativePath(moduleRoot, directory));
-            if (ShouldSkipDirectory(name) ||
+            if (ShouldSkipDirectory(name, relativePath) ||
                 ignorePatterns.Any(pattern => pattern.Matches(relativePath, isDirectory: true)))
             {
                 continue;
@@ -123,11 +127,20 @@ public sealed class WorkerWorkspaceManager
     private static string NormalizePath(string path) =>
         path.Replace('\\', '/').TrimStart('/');
 
-    private static bool ShouldSkipDirectory(string name) =>
+    private static bool ShouldSkipDirectory(string name, string relativePath) =>
         ExcludedDirectories.Contains(name) ||
-        name.StartsWith(".", StringComparison.Ordinal) ||
+        IsRootOnlyExcludedDirectory(name, relativePath) ||
+        IsRootHiddenDirectory(name, relativePath) ||
         name.StartsWith("tmp-", StringComparison.OrdinalIgnoreCase) ||
         name.StartsWith("temp-", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsRootOnlyExcludedDirectory(string name, string relativePath) =>
+        RootOnlyExcludedDirectories.Contains(name) &&
+        !NormalizePath(relativePath).Contains('/');
+
+    private static bool IsRootHiddenDirectory(string name, string relativePath) =>
+        name.StartsWith(".", StringComparison.Ordinal) &&
+        !NormalizePath(relativePath).Contains('/');
 
     private sealed record IgnorePattern(string Pattern, bool DirectoryOnly)
     {

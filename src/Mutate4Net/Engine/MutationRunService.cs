@@ -197,13 +197,15 @@ public sealed class MutationRunService
             string mutated = originalSource[..site.Start] + site.Replacement + originalSource[site.End..];
             await File.WriteAllTextAsync(workspace.SourceFile, mutated);
             CommandResult result = await TestCommandRunner.RunAsync(_executor, workerCommand, timeoutMillis);
+            bool killed = result.ExitCode != 0 || result.TimedOut;
             return new MutationResult(
                 site,
-                result.ExitCode != 0 || result.TimedOut,
+                killed,
                 result.DurationMillis,
                 result.TimedOut,
                 order,
-                totalJobs);
+                totalJobs,
+                killed && arguments.Verbose ? result.Output : null);
         }
         finally
         {

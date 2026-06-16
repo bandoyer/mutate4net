@@ -45,6 +45,8 @@ public sealed class WorkerWorkspaceManagerTests
         workspace.Write(".claude/settings.local.json", "{}");
         workspace.Write("StrykerOutput/report.html", "<html></html>");
         workspace.Write("logs/latest.log", "log");
+        workspace.Write("src/Models/Logs/ApplicationLog.cs", "class ApplicationLog { }");
+        workspace.Write("src/Web/.Infrastructure/Alert.cs", "class Alert { }");
         workspace.Write("tmp/cache.txt", "cache");
         workspace.Write("tmp-run/cache.txt", "cache");
         var manager = new WorkerWorkspaceManager();
@@ -57,6 +59,8 @@ public sealed class WorkerWorkspaceManagerTests
         Assert.False(Directory.Exists(Path.Combine(worker.ModuleRoot, ".claude")));
         Assert.False(Directory.Exists(Path.Combine(worker.ModuleRoot, "StrykerOutput")));
         Assert.False(Directory.Exists(Path.Combine(worker.ModuleRoot, "logs")));
+        Assert.True(File.Exists(Path.Combine(worker.ModuleRoot, "src", "Models", "Logs", "ApplicationLog.cs")));
+        Assert.True(File.Exists(Path.Combine(worker.ModuleRoot, "src", "Web", ".Infrastructure", "Alert.cs")));
         Assert.False(Directory.Exists(Path.Combine(worker.ModuleRoot, "tmp")));
         Assert.False(Directory.Exists(Path.Combine(worker.ModuleRoot, "tmp-run")));
     }
