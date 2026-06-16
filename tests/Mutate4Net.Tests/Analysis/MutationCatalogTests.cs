@@ -1157,6 +1157,103 @@ public sealed class MutationCatalogTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_DiscoversAsyncTaskMutators()
+    {
+        const string source = """
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            class Sample
+            {
+                async Task SaveAsync(Worker worker, CancellationToken cancellationToken)
+                {
+                    await worker.FlushAsync(cancellationToken);
+                    await Task.Delay(500, cancellationToken);
+                    await Task.Yield();
+                    await worker.FlushAsync(cancellationToken).ConfigureAwait(false);
+                    await Task.CompletedTask;
+                }
+            }
+
+            class Worker
+            {
+                public Task FlushAsync(CancellationToken cancellationToken)
+                {
+                    return Task.CompletedTask;
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "async",
+            MutatorId: "await-removal",
+            Original: "await",
+            Replacement: ""
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "async",
+            MutatorId: "task-delay",
+            Original: "Task.Delay(500, cancellationToken)",
+            Replacement: "global::System.Threading.Tasks.Task.CompletedTask"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "async",
+            MutatorId: "task-yield",
+            Original: "Task.Yield()",
+            Replacement: "global::System.Threading.Tasks.Task.CompletedTask"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "async",
+            MutatorId: "configure-await",
+            Original: "worker.FlushAsync(cancellationToken).ConfigureAwait(false)",
+            Replacement: "worker.FlushAsync(cancellationToken)"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "async",
+            MutatorId: "cancellation-token",
+            Original: "cancellationToken",
+            Replacement: "global::System.Threading.CancellationToken.None"
+        });
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_DoesNotReplaceDefaultCancellationTokens()
+    {
+        const string source = """
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            class Sample
+            {
+                async Task SaveAsync()
+                {
+                    await Task.Delay(500, CancellationToken.None);
+                    await Task.Delay(500, default);
+                    await Task.Delay(500, default(CancellationToken));
+                    await Task.CompletedTask;
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.DoesNotContain(analysis.Sites, site => site is
+        {
+            Category: "async",
+            MutatorId: "cancellation-token"
+        });
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_DiscoversRemovableInvocationStatements()
     {
         const string source = """

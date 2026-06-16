@@ -257,7 +257,14 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
     {
         AddLinqMethodReplacement(node);
         AddStringMethodReplacement(node);
+        AddAsyncInvocationReplacement(node);
         base.VisitInvocationExpression(node);
+    }
+
+    public override void VisitAwaitExpression(AwaitExpressionSyntax node)
+    {
+        AddAwaitRemoval(node);
+        base.VisitAwaitExpression(node);
     }
 
     public override void VisitExpressionStatement(ExpressionStatementSyntax node)
@@ -406,6 +413,21 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
             "linq");
     }
 
+    private void AddAsyncInvocationReplacement(InvocationExpressionSyntax node)
+    {
+        SimpleNameSyntax? name = InvocationName(node);
+        if (name is null ||
+            _semanticModel.GetSymbolInfo(node).Symbol is not IMethodSymbol method)
+        {
+            return;
+        }
+
+        AddTaskDelayReplacement(node, method);
+        AddTaskYieldReplacement(node, method);
+        AddConfigureAwaitReplacement(node, method);
+        AddCancellationTokenReplacements(node);
+    }
+
     private void AddStringMethodReplacement(InvocationExpressionSyntax node)
     {
         SimpleNameSyntax? name = InvocationName(node);
@@ -429,6 +451,88 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
             $"replace {name.Identifier.ValueText} with {replacement}",
             "string-method",
             "string");
+    }
+
+    private void AddTaskDelayReplacement(InvocationExpressionSyntax node, IMethodSymbol method)
+    {
+        if (!IsSystemTaskMethod(method, "Delay"))
+        {
+            return;
+        }
+
+        string original = _source[node.Span.Start..node.Span.End];
+        AddSite(
+            node,
+            node.Span,
+            original,
+            "global::System.Threading.Tasks.Task.CompletedTask",
+            "replace Task.Delay with completed task",
+            "task-delay",
+            "async");
+    }
+
+    private void AddTaskYieldReplacement(InvocationExpressionSyntax node, IMethodSymbol method)
+    {
+        if (!IsSystemTaskMethod(method, "Yield") ||
+            node.Parent is not AwaitExpressionSyntax)
+        {
+            return;
+        }
+
+        string original = _source[node.Span.Start..node.Span.End];
+        AddSite(
+            node,
+            node.Span,
+            original,
+            "global::System.Threading.Tasks.Task.CompletedTask",
+            "replace Task.Yield with completed task",
+            "task-yield",
+            "async");
+    }
+
+    private void AddConfigureAwaitReplacement(InvocationExpressionSyntax node, IMethodSymbol method)
+    {
+        if (method.Name != "ConfigureAwait" ||
+            node.Parent is not AwaitExpressionSyntax ||
+            node.Expression is not MemberAccessExpressionSyntax memberAccess ||
+            method.Parameters.Length != 1 ||
+            method.Parameters[0].Type.SpecialType != SpecialType.System_Boolean)
+        {
+            return;
+        }
+
+        string original = _source[node.Span.Start..node.Span.End];
+        string replacement = _source[memberAccess.Expression.Span.Start..memberAccess.Expression.Span.End];
+        AddSite(
+            node,
+            node.Span,
+            original,
+            replacement,
+            "remove ConfigureAwait call",
+            "configure-await",
+            "async");
+    }
+
+    private void AddCancellationTokenReplacements(InvocationExpressionSyntax node)
+    {
+        foreach (ArgumentSyntax argument in node.ArgumentList.Arguments)
+        {
+            if (!IsCancellationToken(argument.Expression) ||
+                IsDefaultCancellationToken(argument.Expression))
+            {
+                continue;
+            }
+
+            string original = _source[argument.Expression.Span.Start..argument.Expression.Span.End];
+            AddSite(
+                argument.Expression,
+                argument.Expression.Span,
+                original,
+                "global::System.Threading.CancellationToken.None",
+                "replace cancellation token with CancellationToken.None",
+                "cancellation-token",
+                "async");
+        }
     }
 
     private void AddCoalescingExpressionReplacement(BinaryExpressionSyntax node)
@@ -622,6 +726,24 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
 
         string original = _source[expression.Span.Start..expression.Span.End];
         AddSite(expression, expression.Span, original, "null", "replace " + original + " with null", "null-replacement", "null");
+    }
+
+    private void AddAwaitRemoval(AwaitExpressionSyntax node)
+    {
+        if (node.Parent is not ExpressionStatementSyntax ||
+            node.Expression is not InvocationExpressionSyntax)
+        {
+            return;
+        }
+
+        AddSite(
+            node,
+            node.AwaitKeyword.Span,
+            "await",
+            string.Empty,
+            "remove await from invocation statement",
+            "await-removal",
+            "async");
     }
 
     private void AddThrowStatementRemoval(ThrowStatementSyntax node)
@@ -851,6 +973,16 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         return false;
     }
 
+    private bool IsCancellationToken(ExpressionSyntax expression)
+    {
+        ITypeSymbol? type = _semanticModel.GetTypeInfo(expression).ConvertedType ??
+            _semanticModel.GetTypeInfo(expression).Type;
+        INamedTypeSymbol? cancellationTokenType = _semanticModel.Compilation.GetTypeByMetadataName("System.Threading.CancellationToken");
+        return type is not null &&
+            cancellationTokenType is not null &&
+            SymbolEqualityComparer.Default.Equals(type, cancellationTokenType);
+    }
+
     private static bool IsNumericType(ITypeSymbol type) => type.SpecialType is
         SpecialType.System_SByte or
         SpecialType.System_Byte or
@@ -1052,6 +1184,15 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
     private static bool IsSystemStringMethod(IMethodSymbol method) =>
         method.ContainingType?.SpecialType == SpecialType.System_String;
 
+    private static bool IsSystemTaskMethod(IMethodSymbol method, string name)
+    {
+        INamedTypeSymbol? containingType = method.ContainingType;
+        return method.Name == name &&
+               containingType is not null &&
+               containingType.Name == "Task" &&
+               containingType.ContainingNamespace.ToDisplayString() == "System.Threading.Tasks";
+    }
+
     private static SimpleNameSyntax? InvocationName(InvocationExpressionSyntax node) => node.Expression switch
     {
         SimpleNameSyntax simpleName => simpleName,
@@ -1075,6 +1216,27 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         method.IsStatic &&
         method.Parameters.Length == 1 &&
         method.Parameters[0].Type.SpecialType == SpecialType.System_String;
+
+    private bool IsDefaultCancellationToken(ExpressionSyntax expression)
+    {
+        if (expression.IsKind(SyntaxKind.DefaultLiteralExpression) ||
+            expression is DefaultExpressionSyntax)
+        {
+            return true;
+        }
+
+        return _semanticModel.GetSymbolInfo(expression).Symbol is IPropertySymbol property &&
+            property.Name == "None" &&
+            IsCancellationTokenType(property.ContainingType);
+    }
+
+    private bool IsCancellationTokenType(ITypeSymbol? type)
+    {
+        INamedTypeSymbol? cancellationTokenType = _semanticModel.Compilation.GetTypeByMetadataName("System.Threading.CancellationToken");
+        return type is not null &&
+            cancellationTokenType is not null &&
+            SymbolEqualityComparer.Default.Equals(type, cancellationTokenType);
+    }
 
     private static bool IsNumericValue(object? value, decimal expected)
     {
