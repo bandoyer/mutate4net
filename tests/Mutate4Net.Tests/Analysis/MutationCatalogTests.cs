@@ -481,6 +481,104 @@ public sealed class MutationCatalogTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_DiscoversPatternNegationMutators()
+    {
+        const string source = """
+            class Sample
+            {
+                bool Matches(object? value, int[] numbers)
+                {
+                    return value is string
+                        || value is not null
+                        || numbers is [1, ..]
+                        || value is var captured
+                        || value is _;
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "pattern",
+            MutatorId: "pattern-negation",
+            Description: "replace is pattern with is not pattern",
+            Original: "is",
+            Replacement: "is not"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "pattern",
+            MutatorId: "pattern-negation",
+            Description: "replace is not pattern with is pattern",
+            Original: "not",
+            Replacement: ""
+        });
+        Assert.DoesNotContain(analysis.Sites, site =>
+            site is
+            {
+                Category: "pattern",
+                MutatorId: "pattern-negation",
+                Replacement: "is not"
+            } &&
+            site.Line == 8);
+        Assert.DoesNotContain(analysis.Sites, site =>
+            site is
+            {
+                Category: "pattern",
+                MutatorId: "pattern-negation",
+                Replacement: "is not"
+            } &&
+            site.Line == 9);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_DiscoversSwitchExpressionArmMutators()
+    {
+        const string source = """
+            class Sample
+            {
+                string Label(int value)
+                {
+                    return value switch
+                    {
+                        0 => "zero",
+                        1 => "one",
+                        _ => "many"
+                    };
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "switch",
+            MutatorId: "switch-expression",
+            Description: "replace switch expression with arm expression",
+            Replacement: "\"zero\""
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "switch",
+            MutatorId: "switch-expression",
+            Description: "replace switch expression with arm expression",
+            Replacement: "\"one\""
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "switch",
+            MutatorId: "switch-expression",
+            Description: "replace switch expression with arm expression",
+            Replacement: "\"many\""
+        });
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_DiscoversCollectionEmptyMutators()
     {
         const string source = """

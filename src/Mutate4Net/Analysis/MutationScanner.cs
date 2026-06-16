@@ -168,6 +168,18 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         base.VisitBinaryPattern(node);
     }
 
+    public override void VisitIsPatternExpression(IsPatternExpressionSyntax node)
+    {
+        AddPatternNegationReplacement(node);
+        base.VisitIsPatternExpression(node);
+    }
+
+    public override void VisitSwitchExpression(SwitchExpressionSyntax node)
+    {
+        AddSwitchExpressionReplacement(node);
+        base.VisitSwitchExpression(node);
+    }
+
     public override void VisitCheckedExpression(CheckedExpressionSyntax node)
     {
         AddCheckedReplacement(node, node.Keyword);
@@ -441,6 +453,59 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
             "replace collection initializer with empty initializer",
             "collection-empty",
             "collection");
+    }
+
+    private void AddPatternNegationReplacement(IsPatternExpressionSyntax node)
+    {
+        if (node.Pattern is UnaryPatternSyntax notPattern &&
+            notPattern.OperatorToken.IsKind(SyntaxKind.NotKeyword))
+        {
+            AddSite(
+                node,
+                notPattern.OperatorToken.Span,
+                "not",
+                string.Empty,
+                "replace is not pattern with is pattern",
+                "pattern-negation",
+                "pattern");
+            return;
+        }
+
+        if (!CanNegatePattern(node.Pattern))
+        {
+            return;
+        }
+
+        AddSite(
+            node,
+            node.IsKeyword.Span,
+            "is",
+            "is not",
+            "replace is pattern with is not pattern",
+            "pattern-negation",
+            "pattern");
+    }
+
+    private void AddSwitchExpressionReplacement(SwitchExpressionSyntax node)
+    {
+        if (node.Arms.Count == 0)
+        {
+            return;
+        }
+
+        string original = _source[node.Span.Start..node.Span.End];
+        foreach (SwitchExpressionArmSyntax arm in node.Arms)
+        {
+            string replacement = _source[arm.Expression.Span.Start..arm.Expression.Span.End];
+            AddSite(
+                arm.Expression,
+                node.Span,
+                original,
+                replacement,
+                "replace switch expression with arm expression",
+                "switch-expression",
+                "switch");
+        }
     }
 
     private void AddBooleanConditionReplacement(ExpressionSyntax? condition)
@@ -777,6 +842,14 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         SyntaxToken previousSeparator = expressions.GetSeparator(index - 1);
         return TextSpan.FromBounds(previousSeparator.FullSpan.Start, expression.Span.End);
     }
+
+    private static bool CanNegatePattern(PatternSyntax pattern) => pattern switch
+    {
+        VarPatternSyntax => false,
+        DiscardPatternSyntax => false,
+        UnaryPatternSyntax => false,
+        _ => true
+    };
 
     private static (string Original, string Replacement)? UpdateOperatorFor(SyntaxKind kind) => kind switch
     {
