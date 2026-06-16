@@ -411,6 +411,77 @@ public sealed class MutationRunServiceTests
         Assert.Contains("Summary: 1 killed, 0 survived, 1 total.", outcome.Output);
     }
 
+    [Fact]
+    public async Task RunAsync_ReportsInfrastructureFailureAsError()
+    {
+        using var sample = SampleFile.Create("""
+            class Sample
+            {
+                bool Flag() => true;
+            }
+            """);
+        var executor = new FakeCommandExecutor(
+            new CommandResult(0, "baseline ok", 10, false),
+            new CommandResult(1, "Sample.cs(1,1): error CS0246: missing type", 11, false));
+        var service = CreateService(executor);
+
+        MutationRunOutcome outcome = await service.RunAsync(Arguments(sample.Path));
+
+        Assert.Equal(2, outcome.ExitCode);
+        Assert.Contains("ERROR", outcome.Output);
+        Assert.Contains("Summary: 0 killed, 0 survived, 1 errors, 1 total.", outcome.Output);
+        Assert.DoesNotContain("mutate4net-manifest", await File.ReadAllTextAsync(sample.Path));
+    }
+
+    [Fact]
+    public async Task RunAsync_AddsNoRestoreAfterWorkerFirstGeneratedTestRun()
+    {
+        using var workspace = TempProjectWorkspace.Create();
+        string projectFile = workspace.Write("src/App/App.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net8.0</TargetFramework>
+                <ImplicitUsings>enable</ImplicitUsings>
+                <Nullable>enable</Nullable>
+              </PropertyGroup>
+            </Project>
+            """);
+        string sourceFile = workspace.Write("src/App/Sample.cs", """
+            namespace App;
+
+            public static class Sample
+            {
+                public static bool First() => true;
+                public static bool Second() => false;
+            }
+            """);
+        var mutantCommands = new List<IReadOnlyList<string>>();
+        var executor = new FakeCommandExecutor(
+            (runCount, command, _) =>
+            {
+                if (runCount > 1)
+                {
+                    mutantCommands.Add(command);
+                }
+            },
+            new CommandResult(0, "baseline ok", 10, false),
+            new CommandResult(1, "first mutant failed", 11, false),
+            new CommandResult(1, "second mutant failed", 12, false));
+        var service = CreateService(executor);
+
+        MutationRunOutcome outcome = await service.RunAsync(Arguments(
+            sourceFile,
+            projectFile: projectFile,
+            reuseCoverage: true,
+            testCommand: null,
+            maxWorkers: 1));
+
+        Assert.Equal(0, outcome.ExitCode);
+        Assert.Equal(2, mutantCommands.Count);
+        Assert.DoesNotContain("--no-restore", mutantCommands[0]);
+        Assert.Contains("--no-restore", mutantCommands[1]);
+    }
+
     private static MutationRunService CreateService(ICommandExecutor executor) =>
         new(
             new MutationCatalog(),

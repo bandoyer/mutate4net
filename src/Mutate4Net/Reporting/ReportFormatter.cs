@@ -49,7 +49,8 @@ public sealed class ReportFormatter
     {
         foreach (MutationResult result in results)
         {
-            builder.Append(result.Killed ? "KILLED " : "SURVIVED ")
+            builder.Append(StatusLabel(result.Status))
+                .Append(' ')
                 .Append(RelativePath(projectRoot, result.Site.File))
                 .Append(':')
                 .Append(result.Site.Line)
@@ -71,6 +72,15 @@ public sealed class ReportFormatter
             AppendFailureOutput(result.FailureOutput, builder);
         }
     }
+
+    private static string StatusLabel(MutationStatus status) =>
+        status switch
+        {
+            MutationStatus.Killed => "KILLED",
+            MutationStatus.Survived => "SURVIVED",
+            MutationStatus.Error => "ERROR",
+            _ => status.ToString().ToUpperInvariant()
+        };
 
     private static void AppendFailureOutput(string? failureOutput, StringBuilder builder)
     {
@@ -103,13 +113,20 @@ public sealed class ReportFormatter
         StringBuilder builder)
     {
         int killed = results.Count(result => result.Killed);
-        int survived = results.Count - killed;
+        int survived = results.Count(result => result.Survived);
+        int errors = results.Count(result => result.Error);
         builder.Append("Coverage: ").Append(uncovered.Count).Append(" uncovered sites skipped.\n");
         builder.Append("Summary: ")
             .Append(killed)
             .Append(" killed, ")
             .Append(survived)
-            .Append(" survived, ")
+            .Append(" survived, ");
+        if (errors > 0)
+        {
+            builder.Append(errors).Append(" errors, ");
+        }
+
+        builder
             .Append(results.Count)
             .Append(" total.\n");
     }

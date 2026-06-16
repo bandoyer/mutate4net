@@ -102,8 +102,9 @@ public sealed class MutationRunService
             TimeoutMillis(baseline.DurationMillis, arguments.TimeoutFactor),
             arguments.MaxWorkers);
 
-        bool survived = results.Any(result => !result.Killed);
-        if (!survived && ShouldWriteManifest(arguments))
+        bool survived = results.Any(result => result.Survived);
+        bool hasErrors = results.Any(result => result.Error);
+        if (!survived && !hasErrors && ShouldWriteManifest(arguments))
         {
             await _manifestSupport.WriteAsync(
                 arguments.TargetFile,
@@ -123,7 +124,7 @@ public sealed class MutationRunService
                 coverageSelection.Uncovered.Count),
             coverageSelection.Uncovered,
             results);
-        return new MutationRunOutcome(survived ? 3 : 0, report, string.Empty);
+        return new MutationRunOutcome(hasErrors ? 2 : survived ? 3 : 0, report, string.Empty);
     }
 
     private async Task<IReadOnlyList<MutationResult>> RunMutantsAsync(
@@ -143,6 +144,7 @@ public sealed class MutationRunService
         int workerCount = Math.Max(1, Math.Min(maxWorkers, sites.Count));
         IReadOnlyList<WorkerWorkspace> workerPool = _workspaceManager.CreatePool(moduleRoot, sourceFile, workerCount);
         var availableWorkers = new ConcurrentQueue<WorkerWorkspace>(workerPool);
+        var restoredWorkers = new ConcurrentDictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         using var throttle = new SemaphoreSlim(workerCount, workerCount);
         try
         {
@@ -156,7 +158,8 @@ public sealed class MutationRunService
                     index + 1,
                     sites.Count,
                     throttle,
-                    availableWorkers))
+                    availableWorkers,
+                    restoredWorkers))
                 .ToArray();
 
             MutationResult[] results = await Task.WhenAll(tasks);
@@ -177,7 +180,8 @@ public sealed class MutationRunService
         int order,
         int totalJobs,
         SemaphoreSlim throttle,
-        ConcurrentQueue<WorkerWorkspace> availableWorkers)
+        ConcurrentQueue<WorkerWorkspace> availableWorkers,
+        ConcurrentDictionary<string, bool> restoredWorkers)
     {
         await throttle.WaitAsync();
         if (!availableWorkers.TryDequeue(out WorkerWorkspace? workspace))
@@ -193,19 +197,22 @@ public sealed class MutationRunService
                 TargetFile = workspace.SourceFile,
                 ProjectFile = RemapPathToWorker(arguments.ProjectFile, moduleRoot, workspace.ModuleRoot)
             };
-            TestCommand workerCommand = _testCommandFactory.Create(workerArguments);
+            bool noRestore = string.IsNullOrWhiteSpace(workerArguments.TestCommand) &&
+                restoredWorkers.ContainsKey(workspace.ModuleRoot);
+            TestCommand workerCommand = _testCommandFactory.Create(workerArguments, noRestore);
             string mutated = originalSource[..site.Start] + site.Replacement + originalSource[site.End..];
             await File.WriteAllTextAsync(workspace.SourceFile, mutated);
             CommandResult result = await TestCommandRunner.RunAsync(_executor, workerCommand, timeoutMillis);
-            bool killed = result.ExitCode != 0 || result.TimedOut;
+            MutationStatus status = MutationFailureClassifier.Classify(result);
+            MarkWorkerRestored(workerCommand, workspace, result, restoredWorkers);
             return new MutationResult(
                 site,
-                killed,
+                status,
                 result.DurationMillis,
                 result.TimedOut,
                 order,
                 totalJobs,
-                killed && arguments.Verbose ? result.Output : null);
+                status != MutationStatus.Survived && arguments.Verbose ? result.Output : null);
         }
         finally
         {
@@ -223,6 +230,24 @@ public sealed class MutationRunService
 
     private static long TimeoutMillis(long baselineDurationMillis, int timeoutFactor) =>
         Math.Max(1_000, baselineDurationMillis * timeoutFactor);
+
+    private static void MarkWorkerRestored(
+        TestCommand workerCommand,
+        WorkerWorkspace workspace,
+        CommandResult result,
+        ConcurrentDictionary<string, bool> restoredWorkers)
+    {
+        if (workerCommand.IsCustom ||
+            result.TimedOut ||
+            result.Output.Contains("project.assets.json", StringComparison.OrdinalIgnoreCase) ||
+            result.Output.Contains("Assets file", StringComparison.OrdinalIgnoreCase) ||
+            result.Output.Contains("Restore failed", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        restoredWorkers.TryAdd(workspace.ModuleRoot, true);
+    }
 
     private static bool ShouldWriteManifest(CliArguments arguments) =>
         arguments.Lines.Count == 0 &&

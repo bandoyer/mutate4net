@@ -17,14 +17,15 @@ public sealed class TestCommandFactory
         _projectDiscovery = projectDiscovery;
     }
 
-    public TestCommand Create(CliArguments arguments) =>
+    public TestCommand Create(CliArguments arguments, bool noRestore = false) =>
         Create(
             arguments.TargetFile,
             arguments.ProjectFile,
             arguments.TestCommand,
             arguments.TestProjects,
             arguments.ExcludedTestProjects,
-            arguments.TestFilter);
+            arguments.TestFilter,
+            noRestore);
 
     public TestCommand Create(string sourceFile, string? customCommand)
     {
@@ -47,7 +48,8 @@ public sealed class TestCommandFactory
         string? customCommand,
         IReadOnlyList<string> testProjects,
         IReadOnlyList<string> excludedTestProjects,
-        string? testFilter = null)
+        string? testFilter = null,
+        bool noRestore = false)
     {
         ProjectInfo? project = _projectDiscovery.Discover(sourceFile, projectFile);
         string workingDirectory = project is null
@@ -65,17 +67,17 @@ public sealed class TestCommandFactory
         if (selectedTestProjects.Count > 0)
         {
             return new TestCommand(
-                selectedTestProjects.Select(testProject => DotNetTestCommand(testProject, testFilter)).ToArray(),
+                selectedTestProjects.Select(testProject => DotNetTestCommand(testProject, testFilter, noRestore)).ToArray(),
                 workingDirectory);
         }
 
         if (project is null)
         {
-            return new TestCommand(DotNetTestCommand(testTarget: null, testFilter), workingDirectory);
+            return new TestCommand(DotNetTestCommand(testTarget: null, testFilter, noRestore), workingDirectory);
         }
 
         string testTarget = project.SolutionFile ?? project.ProjectFile;
-        return new TestCommand(DotNetTestCommand(testTarget, testFilter), workingDirectory);
+        return new TestCommand(DotNetTestCommand(testTarget, testFilter, noRestore), workingDirectory);
     }
 
     public TestCommand CreateCoverageCommand(CliArguments arguments, string coverageOutputPrefix)
@@ -185,12 +187,17 @@ public sealed class TestCommandFactory
         return ["/bin/sh", "-c", command];
     }
 
-    private static IReadOnlyList<string> DotNetTestCommand(string? testTarget, string? testFilter)
+    private static IReadOnlyList<string> DotNetTestCommand(string? testTarget, string? testFilter, bool noRestore)
     {
         var command = new List<string> { "dotnet", "test" };
         if (!string.IsNullOrWhiteSpace(testTarget))
         {
             command.Add(testTarget);
+        }
+
+        if (noRestore)
+        {
+            command.Add("--no-restore");
         }
 
         if (!string.IsNullOrWhiteSpace(testFilter))
