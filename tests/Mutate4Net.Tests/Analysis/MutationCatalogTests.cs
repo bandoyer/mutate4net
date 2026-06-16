@@ -1513,6 +1513,111 @@ public sealed class MutationCatalogTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_DiscoversControlFlowBlockRemovalMutators()
+    {
+        const string source = """
+            using System;
+
+            class Sample
+            {
+                void Save(bool flag, object gate, IDisposable disposable)
+                {
+                    if (flag)
+                    {
+                        Notify();
+                    }
+                    else
+                    {
+                        Notify();
+                    }
+
+                    while (flag)
+                    {
+                        flag = false;
+                    }
+
+                    using (disposable)
+                    {
+                        Notify();
+                    }
+
+                    lock (gate)
+                    {
+                        Notify();
+                    }
+
+                    try
+                    {
+                        Notify();
+                    }
+                    catch (Exception)
+                    {
+                        Notify();
+                    }
+                    finally
+                    {
+                        Notify();
+                    }
+                }
+
+                void Notify()
+                {
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.Contains(analysis.Sites, site =>
+            site is
+            {
+                Category: "statement",
+                MutatorId: "block-removal",
+                Replacement: "{ }"
+            } &&
+            site.Original.Contains("Notify();", StringComparison.Ordinal));
+        Assert.Contains(analysis.Sites, site =>
+            site is
+            {
+                Category: "statement",
+                MutatorId: "else-clause-removal",
+                Replacement: ""
+            } &&
+            site.Original.TrimStart().StartsWith("else", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_DoesNotEmptyMemberBodiesOrAlreadyEmptyBlocks()
+    {
+        const string source = """
+            class Sample
+            {
+                int Count()
+                {
+                    return 1;
+                }
+
+                void Save(bool flag)
+                {
+                    if (flag)
+                    {
+                    }
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.DoesNotContain(analysis.Sites, site => site is
+        {
+            Category: "statement",
+            MutatorId: "block-removal"
+        });
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_DiscoversPatternOperators()
     {
         const string source = """

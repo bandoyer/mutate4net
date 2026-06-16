@@ -268,6 +268,18 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         base.VisitAwaitExpression(node);
     }
 
+    public override void VisitBlock(BlockSyntax node)
+    {
+        AddControlFlowBlockReplacement(node);
+        base.VisitBlock(node);
+    }
+
+    public override void VisitElseClause(ElseClauseSyntax node)
+    {
+        AddElseClauseRemoval(node);
+        base.VisitElseClause(node);
+    }
+
     public override void VisitExpressionStatement(ExpressionStatementSyntax node)
     {
         if (RemovableStatementDescription(node) is { } description)
@@ -811,6 +823,38 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         AddSite(expression, expression.Span, original, "null", "replace " + original + " with null", "null-replacement", "null");
     }
 
+    private void AddControlFlowBlockReplacement(BlockSyntax node)
+    {
+        if (node.Statements.Count == 0 ||
+            !IsControlFlowBodyBlock(node))
+        {
+            return;
+        }
+
+        string original = _source[node.Span.Start..node.Span.End];
+        AddSite(
+            node,
+            node.Span,
+            original,
+            "{ }",
+            "replace block body with empty block",
+            "block-removal",
+            "statement");
+    }
+
+    private void AddElseClauseRemoval(ElseClauseSyntax node)
+    {
+        string original = _source[node.Span.Start..node.Span.End];
+        AddSite(
+            node,
+            node.Span,
+            original,
+            string.Empty,
+            "remove else clause",
+            "else-clause-removal",
+            "statement");
+    }
+
     private void AddAwaitRemoval(AwaitExpressionSyntax node)
     {
         if (node.Parent is not ExpressionStatementSyntax ||
@@ -1156,6 +1200,26 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         SyntaxKind.RightShiftAssignmentExpression => (">>=", "<<=", OperatorRequirement.Bitwise),
         SyntaxKind.UnsignedRightShiftAssignmentExpression => (">>>=", "<<=", OperatorRequirement.Bitwise),
         _ => null
+    };
+
+    private static bool IsControlFlowBodyBlock(BlockSyntax node) => node.Parent switch
+    {
+        IfStatementSyntax ifStatement => ReferenceEquals(ifStatement.Statement, node),
+        ElseClauseSyntax elseClause => ReferenceEquals(elseClause.Statement, node),
+        WhileStatementSyntax whileStatement => ReferenceEquals(whileStatement.Statement, node),
+        DoStatementSyntax doStatement => ReferenceEquals(doStatement.Statement, node),
+        ForStatementSyntax forStatement => ReferenceEquals(forStatement.Statement, node),
+        ForEachStatementSyntax forEachStatement => ReferenceEquals(forEachStatement.Statement, node),
+        ForEachVariableStatementSyntax forEachVariableStatement => ReferenceEquals(forEachVariableStatement.Statement, node),
+        UsingStatementSyntax usingStatement => ReferenceEquals(usingStatement.Statement, node),
+        FixedStatementSyntax fixedStatement => ReferenceEquals(fixedStatement.Statement, node),
+        LockStatementSyntax lockStatement => ReferenceEquals(lockStatement.Statement, node),
+        TryStatementSyntax tryStatement => ReferenceEquals(tryStatement.Block, node),
+        CatchClauseSyntax catchClause => ReferenceEquals(catchClause.Block, node),
+        FinallyClauseSyntax finallyClause => ReferenceEquals(finallyClause.Block, node),
+        CheckedStatementSyntax checkedStatement => ReferenceEquals(checkedStatement.Block, node),
+        UnsafeStatementSyntax unsafeStatement => ReferenceEquals(unsafeStatement.Block, node),
+        _ => false
     };
 
     private static TextSpan ObjectInitializerMemberRemovalSpan(
