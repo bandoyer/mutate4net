@@ -434,6 +434,28 @@ public sealed class MutationRunServiceTests
     }
 
     [Fact]
+    public async Task RunAsync_ReportsMtpZeroTestPolicyFailureAsError()
+    {
+        using var sample = SampleFile.Create("""
+            class Sample
+            {
+                bool Flag() => true;
+            }
+            """);
+        var executor = new FakeCommandExecutor(
+            new CommandResult(0, "baseline ok", 10, false),
+            new CommandResult(8, "Minimum expected tests policy violation, tests ran 0, minimum expected 1", 11, false));
+        var service = CreateService(executor);
+
+        MutationRunOutcome outcome = await service.RunAsync(Arguments(sample.Path));
+
+        Assert.Equal(2, outcome.ExitCode);
+        Assert.Contains("ERROR", outcome.Output);
+        Assert.Contains("Summary: 0 killed, 0 survived, 1 errors, 1 total.", outcome.Output);
+        Assert.DoesNotContain("mutate4net-manifest", await File.ReadAllTextAsync(sample.Path));
+    }
+
+    [Fact]
     public async Task RunAsync_AddsNoRestoreAfterWorkerFirstGeneratedTestRun()
     {
         using var workspace = TempProjectWorkspace.Create();

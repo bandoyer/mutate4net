@@ -20,6 +20,9 @@ public static class MutationFailureClassifier
         "The imported project",
         "No test matches the given testcase filter",
         "No tests are available",
+        "Zero tests ran",
+        "Minimum expected tests policy violation",
+        "tests ran 0, minimum expected",
         "mutate4net detected that the test command ran zero tests"
     ];
 
