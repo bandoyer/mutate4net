@@ -258,6 +258,7 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         AddLinqMethodReplacement(node);
         AddStringMethodReplacement(node);
         AddAsyncInvocationReplacement(node);
+        AddArgumentValueReplacements(node.ArgumentList.Arguments);
         base.VisitInvocationExpression(node);
     }
 
@@ -297,6 +298,18 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         AddThrowExpressionDefaultReplacement(node);
         AddThrownExceptionReplacement(node.Expression);
         base.VisitThrowExpression(node);
+    }
+
+    public override void VisitObjectCreationExpression(ObjectCreationExpressionSyntax node)
+    {
+        AddArgumentValueReplacements(node.ArgumentList?.Arguments);
+        base.VisitObjectCreationExpression(node);
+    }
+
+    public override void VisitImplicitObjectCreationExpression(ImplicitObjectCreationExpressionSyntax node)
+    {
+        AddArgumentValueReplacements(node.ArgumentList?.Arguments);
+        base.VisitImplicitObjectCreationExpression(node);
     }
 
     public override void VisitInitializerExpression(InitializerExpressionSyntax node)
@@ -426,6 +439,76 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         AddTaskYieldReplacement(node, method);
         AddConfigureAwaitReplacement(node, method);
         AddCancellationTokenReplacements(node);
+    }
+
+    private void AddArgumentValueReplacements(SeparatedSyntaxList<ArgumentSyntax>? arguments)
+    {
+        if (arguments is null)
+        {
+            return;
+        }
+
+        foreach (ArgumentSyntax argument in arguments.Value)
+        {
+            AddArgumentValueReplacement(argument);
+        }
+    }
+
+    private void AddArgumentValueReplacement(ArgumentSyntax argument)
+    {
+        if (!argument.RefKindKeyword.IsKind(SyntaxKind.None))
+        {
+            return;
+        }
+
+        ExpressionSyntax expression = argument.Expression;
+        if (expression.IsKind(SyntaxKind.NullLiteralExpression) ||
+            expression.IsKind(SyntaxKind.DefaultLiteralExpression) ||
+            expression is LiteralExpressionSyntax ||
+            expression is DefaultExpressionSyntax ||
+            expression is ThrowExpressionSyntax ||
+            IsCancellationToken(expression))
+        {
+            return;
+        }
+
+        string original = _source[expression.Span.Start..expression.Span.End];
+        foreach (string replacement in ArgumentValueReplacements(expression))
+        {
+            AddSite(
+                expression,
+                expression.Span,
+                original,
+                replacement,
+                $"replace argument with {replacement}",
+                "argument-value",
+                "argument");
+        }
+    }
+
+    private IEnumerable<string> ArgumentValueReplacements(ExpressionSyntax expression)
+    {
+        if (IsBool(expression))
+        {
+            yield return "true";
+            yield return "false";
+        }
+        else if (IsNumeric(expression))
+        {
+            yield return "0";
+        }
+        else if (IsString(expression))
+        {
+            yield return "\"\"";
+        }
+        else if (IsReferenceOrNullable(expression))
+        {
+            yield return "null";
+        }
+        else if (IsEnumOrStruct(expression))
+        {
+            yield return "default";
+        }
     }
 
     private void AddStringMethodReplacement(InvocationExpressionSyntax node)
@@ -973,10 +1056,18 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         return false;
     }
 
+    private bool IsEnumOrStruct(ExpressionSyntax expression)
+    {
+        TypeInfo typeInfo = _semanticModel.GetTypeInfo(expression);
+        ITypeSymbol? type = typeInfo.ConvertedType ?? typeInfo.Type;
+        return type?.TypeKind is TypeKind.Enum or TypeKind.Struct &&
+            type.SpecialType != SpecialType.System_Void;
+    }
+
     private bool IsCancellationToken(ExpressionSyntax expression)
     {
-        ITypeSymbol? type = _semanticModel.GetTypeInfo(expression).ConvertedType ??
-            _semanticModel.GetTypeInfo(expression).Type;
+        TypeInfo typeInfo = _semanticModel.GetTypeInfo(expression);
+        ITypeSymbol? type = typeInfo.ConvertedType ?? typeInfo.Type;
         INamedTypeSymbol? cancellationTokenType = _semanticModel.Compilation.GetTypeByMetadataName("System.Threading.CancellationToken");
         return type is not null &&
             cancellationTokenType is not null &&

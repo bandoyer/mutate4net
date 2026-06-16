@@ -1254,6 +1254,140 @@ public sealed class MutationCatalogTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_DiscoversArgumentValueMutators()
+    {
+        const string source = """
+            using System;
+
+            class Sample
+            {
+                void Save(int count, string name, bool enabled, Customer customer, Status status, DateTime timestamp)
+                {
+                    Record(count, name, enabled, customer, status, timestamp);
+                    var first = new Customer(count, name, enabled);
+                    Customer second = new(count, name, enabled);
+                }
+
+                void Record(int count, string name, bool enabled, Customer customer, Status status, DateTime timestamp)
+                {
+                }
+            }
+
+            class Customer
+            {
+                public Customer(int id, string name, bool active)
+                {
+                }
+            }
+
+            enum Status
+            {
+                Inactive,
+                Active
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "argument",
+            MutatorId: "argument-value",
+            Original: "count",
+            Replacement: "0"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "argument",
+            MutatorId: "argument-value",
+            Original: "name",
+            Replacement: "\"\""
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "argument",
+            MutatorId: "argument-value",
+            Original: "enabled",
+            Replacement: "true"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "argument",
+            MutatorId: "argument-value",
+            Original: "enabled",
+            Replacement: "false"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "argument",
+            MutatorId: "argument-value",
+            Original: "customer",
+            Replacement: "null"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "argument",
+            MutatorId: "argument-value",
+            Original: "status",
+            Replacement: "default"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "argument",
+            MutatorId: "argument-value",
+            Original: "timestamp",
+            Replacement: "default"
+        });
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_DoesNotAddArgumentMutatorsForUnsafeOrDefaultArguments()
+    {
+        const string source = """
+            using System;
+            using System.Threading;
+
+            class Sample
+            {
+                void Save(int count, CancellationToken cancellationToken)
+                {
+                    Record(0, "", true, null, default, default(DateTime), cancellationToken);
+                    Ref(ref count, out var next, in count);
+                }
+
+                void Record(int count, string name, bool enabled, Customer customer, Status status, DateTime timestamp, CancellationToken cancellationToken)
+                {
+                }
+
+                void Ref(ref int current, out int next, in int another)
+                {
+                    next = 0;
+                }
+            }
+
+            class Customer
+            {
+            }
+
+            enum Status
+            {
+                Inactive,
+                Active
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.DoesNotContain(analysis.Sites, site => site is
+        {
+            Category: "argument",
+            MutatorId: "argument-value"
+        });
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_DiscoversRemovableInvocationStatements()
     {
         const string source = """
