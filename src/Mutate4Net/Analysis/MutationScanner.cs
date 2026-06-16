@@ -63,6 +63,8 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
 
     public override void VisitBinaryExpression(BinaryExpressionSyntax node)
     {
+        AddCoalescingExpressionReplacement(node);
+
         (string Original, string Replacement, bool NumericOnly, string MutatorId, string Category)? op = OperatorFor(node.Kind());
         if (op is not null && (!op.Value.NumericOnly || IsNumeric(node)))
         {
@@ -159,6 +161,18 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         base.VisitBinaryPattern(node);
     }
 
+    public override void VisitCheckedExpression(CheckedExpressionSyntax node)
+    {
+        AddCheckedReplacement(node, node.Keyword);
+        base.VisitCheckedExpression(node);
+    }
+
+    public override void VisitCheckedStatement(CheckedStatementSyntax node)
+    {
+        AddCheckedReplacement(node, node.Keyword);
+        base.VisitCheckedStatement(node);
+    }
+
     public override void VisitIfStatement(IfStatementSyntax node)
     {
         AddBooleanConditionReplacement(node.Condition);
@@ -233,6 +247,30 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         base.VisitExpressionStatement(node);
     }
 
+    public override void VisitInitializerExpression(InitializerExpressionSyntax node)
+    {
+        AddCollectionInitializerReplacement(node);
+        base.VisitInitializerExpression(node);
+    }
+
+    public override void VisitCollectionExpression(CollectionExpressionSyntax node)
+    {
+        if (node.Elements.Count > 0)
+        {
+            string original = _source[node.Span.Start..node.Span.End];
+            AddSite(
+                node,
+                node.Span,
+                original,
+                "[]",
+                "replace collection expression with empty collection",
+                "collection-empty",
+                "collection");
+        }
+
+        base.VisitCollectionExpression(node);
+    }
+
     public override void VisitReturnStatement(ReturnStatementSyntax node)
     {
         AddReturnValueReplacement(node.Expression);
@@ -255,7 +293,18 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
 
     public override void VisitAssignmentExpression(AssignmentExpressionSyntax node)
     {
-        if (AssignmentOperatorFor(node.Kind()) is { } assignmentOp &&
+        if (node.IsKind(SyntaxKind.CoalesceAssignmentExpression))
+        {
+            AddSite(
+                node,
+                node.OperatorToken.Span,
+                "??=",
+                "=",
+                "replace ??= with =",
+                "coalescing-assignment",
+                "coalescing");
+        }
+        else if (AssignmentOperatorFor(node.Kind()) is { } assignmentOp &&
             IsNumeric(node.Left))
         {
             AddSite(
@@ -320,6 +369,70 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
             $"replace {name.Identifier.ValueText} with {replacement}",
             "string-method",
             "string");
+    }
+
+    private void AddCoalescingExpressionReplacement(BinaryExpressionSyntax node)
+    {
+        if (!node.IsKind(SyntaxKind.CoalesceExpression))
+        {
+            return;
+        }
+
+        string original = _source[node.Span.Start..node.Span.End];
+        AddSite(
+            node,
+            node.Span,
+            original,
+            _source[node.Left.Span.Start..node.Left.Span.End],
+            "replace coalescing expression with left side",
+            "coalescing-expression",
+            "coalescing");
+        AddSite(
+            node,
+            node.Span,
+            original,
+            _source[node.Right.Span.Start..node.Right.Span.End],
+            "replace coalescing expression with right side",
+            "coalescing-expression",
+            "coalescing");
+    }
+
+    private void AddCheckedReplacement(SyntaxNode node, SyntaxToken keyword)
+    {
+        string original = keyword.ValueText;
+        string replacement = original == "checked" ? "unchecked" : "checked";
+        AddSite(
+            node,
+            keyword.Span,
+            original,
+            replacement,
+            $"replace {original} with {replacement}",
+            "checked-context",
+            "checked");
+    }
+
+    private void AddCollectionInitializerReplacement(InitializerExpressionSyntax node)
+    {
+        if (!node.IsKind(SyntaxKind.ArrayInitializerExpression) &&
+            !node.IsKind(SyntaxKind.CollectionInitializerExpression))
+        {
+            return;
+        }
+
+        if (node.Expressions.Count == 0)
+        {
+            return;
+        }
+
+        string original = _source[node.Span.Start..node.Span.End];
+        AddSite(
+            node,
+            node.Span,
+            original,
+            "{ }",
+            "replace collection initializer with empty initializer",
+            "collection-empty",
+            "collection");
     }
 
     private void AddBooleanConditionReplacement(ExpressionSyntax? condition)

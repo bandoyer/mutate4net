@@ -276,6 +276,138 @@ public sealed class MutationCatalogTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_DiscoversCoalescingAndCheckedMutators()
+    {
+        const string source = """
+            class Sample
+            {
+                string Choose(string? value, string fallback)
+                {
+                    string result = value ?? fallback;
+                    result ??= "default";
+                    return result;
+                }
+
+                int Add(int left, int right)
+                {
+                    int total = checked(left + right);
+                    unchecked
+                    {
+                        total += 1;
+                    }
+
+                    return total;
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "coalescing",
+            MutatorId: "coalescing-expression",
+            Description: "replace coalescing expression with left side",
+            Original: "value ?? fallback",
+            Replacement: "value"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "coalescing",
+            MutatorId: "coalescing-expression",
+            Description: "replace coalescing expression with right side",
+            Original: "value ?? fallback",
+            Replacement: "fallback"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "coalescing",
+            MutatorId: "coalescing-assignment",
+            Description: "replace ??= with =",
+            Original: "??=",
+            Replacement: "="
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "checked",
+            MutatorId: "checked-context",
+            Description: "replace checked with unchecked",
+            Original: "checked",
+            Replacement: "unchecked"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "checked",
+            MutatorId: "checked-context",
+            Description: "replace unchecked with checked",
+            Original: "unchecked",
+            Replacement: "checked"
+        });
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_DiscoversCollectionEmptyMutators()
+    {
+        const string source = """
+            using System.Collections.Generic;
+
+            class Sample
+            {
+                int[] Array()
+                {
+                    return new[] { 1, 2 };
+                }
+
+                List<int> List()
+                {
+                    return new List<int> { 1, 2 };
+                }
+
+                int[] CollectionExpression()
+                {
+                    int[] values = [1, 2, 3];
+                    return values;
+                }
+
+                Holder ObjectInitializer()
+                {
+                    return new Holder { Value = 1 };
+                }
+
+                sealed class Holder
+                {
+                    public int Value { get; set; }
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "collection",
+            MutatorId: "collection-empty",
+            Original: "{ 1, 2 }",
+            Replacement: "{ }"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "collection",
+            MutatorId: "collection-empty",
+            Original: "[1, 2, 3]",
+            Replacement: "[]"
+        });
+        Assert.DoesNotContain(analysis.Sites, site => site is
+        {
+            Category: "collection",
+            MutatorId: "collection-empty",
+            Original: "{ Value = 1 }"
+        });
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_DiscoversBooleanConditionMutators()
     {
         const string source = """
