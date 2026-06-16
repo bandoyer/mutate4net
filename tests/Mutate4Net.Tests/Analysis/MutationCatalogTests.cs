@@ -155,6 +155,140 @@ public sealed class MutationCatalogTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_DiscoversRicherArithmeticAndBitwiseMutators()
+    {
+        const string source = """
+            class Sample
+            {
+                int Ops(int left, int right, int shift)
+                {
+                    int value = left % right;
+                    value = value << shift;
+                    value = value >> shift;
+                    value = value >>> shift;
+                    value &= right;
+                    value |= right;
+                    value ^= right;
+                    value <<= shift;
+                    value >>= shift;
+                    value >>>= shift;
+                    return (left & right) | (left ^ right);
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "arithmetic",
+            MutatorId: "arithmetic-operator",
+            Description: "replace % with *"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "arithmetic",
+            MutatorId: "arithmetic-operator",
+            Description: "replace << with >>"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "arithmetic",
+            MutatorId: "arithmetic-operator",
+            Description: "replace >>> with <<"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "arithmetic",
+            MutatorId: "bitwise-operator",
+            Description: "replace & with |"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "arithmetic",
+            MutatorId: "bitwise-operator",
+            Description: "replace | with &"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "arithmetic",
+            MutatorId: "bitwise-operator",
+            Description: "replace ^ with &"
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "assignment",
+            MutatorId: "assignment-operator",
+            Description: "replace &= with |="
+        });
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "assignment",
+            MutatorId: "assignment-operator",
+            Description: "replace >>>= with <<="
+        });
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_DiscoversObjectInitializerMemberRemoval()
+    {
+        const string source = """
+            class Sample
+            {
+                Holder Create()
+                {
+                    return new Holder
+                    {
+                        First = 1,
+                        Second = "two"
+                    };
+                }
+
+                Holder CreateSingle()
+                {
+                    return new Holder { First = 1 };
+                }
+
+                sealed class Holder
+                {
+                    public int First { get; set; }
+                    public string Second { get; set; } = "";
+                }
+            }
+            """;
+        using var sample = SampleFile.Create(source);
+
+        var analysis = await new MutationCatalog().AnalyzeAsync(sample.Path);
+
+        Assert.Contains(analysis.Sites, site =>
+            site is
+            {
+                Category: "object",
+                MutatorId: "object-initializer-member",
+                Description: "remove object initializer member",
+                Replacement: ""
+            } &&
+            site.Original.Contains("First = 1", StringComparison.Ordinal));
+        Assert.Contains(analysis.Sites, site =>
+            site is
+            {
+                Category: "object",
+                MutatorId: "object-initializer-member",
+                Description: "remove object initializer member",
+                Replacement: ""
+            } &&
+            site.Original.Contains("Second = \"two\"", StringComparison.Ordinal));
+        Assert.Contains(analysis.Sites, site => site is
+        {
+            Category: "object",
+            MutatorId: "object-initializer-member",
+            Original: "First = 1",
+            Replacement: ""
+        });
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_DiscoversSupportedStringMethodMutators()
     {
         const string source = """

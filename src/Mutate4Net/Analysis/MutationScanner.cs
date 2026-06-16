@@ -10,6 +10,13 @@ namespace Mutate4Net.Analysis;
 
 internal sealed class MutationScanner : CSharpSyntaxWalker
 {
+    private enum OperatorRequirement
+    {
+        Any,
+        Numeric,
+        Bitwise
+    }
+
     private readonly string _file;
     private readonly string _source;
     private readonly SyntaxTree _tree;
@@ -65,8 +72,8 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
     {
         AddCoalescingExpressionReplacement(node);
 
-        (string Original, string Replacement, bool NumericOnly, string MutatorId, string Category)? op = OperatorFor(node.Kind());
-        if (op is not null && (!op.Value.NumericOnly || IsNumeric(node)))
+        (string Original, string Replacement, OperatorRequirement Requirement, string MutatorId, string Category)? op = OperatorFor(node.Kind());
+        if (op is not null && MeetsRequirement(node, op.Value.Requirement))
         {
             AddSite(
                 node,
@@ -249,6 +256,7 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
 
     public override void VisitInitializerExpression(InitializerExpressionSyntax node)
     {
+        AddObjectInitializerMemberRemoval(node);
         AddCollectionInitializerReplacement(node);
         base.VisitInitializerExpression(node);
     }
@@ -305,7 +313,7 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
                 "coalescing");
         }
         else if (AssignmentOperatorFor(node.Kind()) is { } assignmentOp &&
-            IsNumeric(node.Left))
+            MeetsRequirement(node.Left, assignmentOp.Requirement))
         {
             AddSite(
                 node,
@@ -474,6 +482,30 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         }
     }
 
+    private void AddObjectInitializerMemberRemoval(InitializerExpressionSyntax node)
+    {
+        if (!node.IsKind(SyntaxKind.ObjectInitializerExpression) ||
+            node.Expressions.Count == 0)
+        {
+            return;
+        }
+
+        for (int i = 0; i < node.Expressions.Count; i++)
+        {
+            ExpressionSyntax expression = node.Expressions[i];
+            TextSpan span = ObjectInitializerMemberRemovalSpan(node.Expressions, i);
+            string original = _source[span.Start..span.End];
+            AddSite(
+                expression,
+                span,
+                original,
+                string.Empty,
+                "remove object initializer member",
+                "object-initializer-member",
+                "object");
+        }
+    }
+
     private void AddNullReplacement(ExpressionSyntax? expression)
     {
         if (expression is null ||
@@ -613,6 +645,23 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         return type?.SpecialType == SpecialType.System_Boolean;
     }
 
+    private bool MeetsRequirement(ExpressionSyntax expression, OperatorRequirement requirement) => requirement switch
+    {
+        OperatorRequirement.Any => true,
+        OperatorRequirement.Numeric => IsNumeric(expression),
+        OperatorRequirement.Bitwise => IsBitwise(expression),
+        _ => false
+    };
+
+    private bool IsBitwise(ExpressionSyntax expression)
+    {
+        ITypeSymbol? type = UnwrapNullable(_semanticModel.GetTypeInfo(expression).Type);
+        return type is not null &&
+               (type.SpecialType == SpecialType.System_Boolean ||
+                type.TypeKind == TypeKind.Enum ||
+                IsIntegralType(type));
+    }
+
     private bool IsReferenceOrNullable(ExpressionSyntax expression)
     {
         TypeInfo typeInfo = _semanticModel.GetTypeInfo(expression);
@@ -638,20 +687,42 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         SpecialType.System_Double or
         SpecialType.System_Decimal;
 
-    private static (string Original, string Replacement, bool NumericOnly, string MutatorId, string Category)? OperatorFor(SyntaxKind kind) => kind switch
+    private static bool IsIntegralType(ITypeSymbol type) => type.SpecialType is
+        SpecialType.System_SByte or
+        SpecialType.System_Byte or
+        SpecialType.System_Int16 or
+        SpecialType.System_UInt16 or
+        SpecialType.System_Int32 or
+        SpecialType.System_UInt32 or
+        SpecialType.System_Int64 or
+        SpecialType.System_UInt64;
+
+    private static ITypeSymbol? UnwrapNullable(ITypeSymbol? type) =>
+        type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullableType
+            ? nullableType.TypeArguments[0]
+            : type;
+
+    private static (string Original, string Replacement, OperatorRequirement Requirement, string MutatorId, string Category)? OperatorFor(SyntaxKind kind) => kind switch
     {
-        SyntaxKind.AddExpression => ("+", "-", true, "arithmetic-operator", "arithmetic"),
-        SyntaxKind.SubtractExpression => ("-", "+", false, "arithmetic-operator", "arithmetic"),
-        SyntaxKind.MultiplyExpression => ("*", "/", false, "arithmetic-operator", "arithmetic"),
-        SyntaxKind.DivideExpression => ("/", "*", false, "arithmetic-operator", "arithmetic"),
-        SyntaxKind.LogicalAndExpression => ("&&", "||", false, "logical-operator", "logical"),
-        SyntaxKind.LogicalOrExpression => ("||", "&&", false, "logical-operator", "logical"),
-        SyntaxKind.EqualsExpression => ("==", "!=", false, "equality-operator", "equality"),
-        SyntaxKind.NotEqualsExpression => ("!=", "==", false, "equality-operator", "equality"),
-        SyntaxKind.GreaterThanExpression => (">", ">=", false, "equality-operator", "equality"),
-        SyntaxKind.GreaterThanOrEqualExpression => (">=", ">", false, "equality-operator", "equality"),
-        SyntaxKind.LessThanExpression => ("<", "<=", false, "equality-operator", "equality"),
-        SyntaxKind.LessThanOrEqualExpression => ("<=", "<", false, "equality-operator", "equality"),
+        SyntaxKind.AddExpression => ("+", "-", OperatorRequirement.Numeric, "arithmetic-operator", "arithmetic"),
+        SyntaxKind.SubtractExpression => ("-", "+", OperatorRequirement.Numeric, "arithmetic-operator", "arithmetic"),
+        SyntaxKind.MultiplyExpression => ("*", "/", OperatorRequirement.Numeric, "arithmetic-operator", "arithmetic"),
+        SyntaxKind.DivideExpression => ("/", "*", OperatorRequirement.Numeric, "arithmetic-operator", "arithmetic"),
+        SyntaxKind.ModuloExpression => ("%", "*", OperatorRequirement.Numeric, "arithmetic-operator", "arithmetic"),
+        SyntaxKind.LeftShiftExpression => ("<<", ">>", OperatorRequirement.Bitwise, "arithmetic-operator", "arithmetic"),
+        SyntaxKind.RightShiftExpression => (">>", "<<", OperatorRequirement.Bitwise, "arithmetic-operator", "arithmetic"),
+        SyntaxKind.UnsignedRightShiftExpression => (">>>", "<<", OperatorRequirement.Bitwise, "arithmetic-operator", "arithmetic"),
+        SyntaxKind.BitwiseAndExpression => ("&", "|", OperatorRequirement.Bitwise, "bitwise-operator", "arithmetic"),
+        SyntaxKind.BitwiseOrExpression => ("|", "&", OperatorRequirement.Bitwise, "bitwise-operator", "arithmetic"),
+        SyntaxKind.ExclusiveOrExpression => ("^", "&", OperatorRequirement.Bitwise, "bitwise-operator", "arithmetic"),
+        SyntaxKind.LogicalAndExpression => ("&&", "||", OperatorRequirement.Any, "logical-operator", "logical"),
+        SyntaxKind.LogicalOrExpression => ("||", "&&", OperatorRequirement.Any, "logical-operator", "logical"),
+        SyntaxKind.EqualsExpression => ("==", "!=", OperatorRequirement.Any, "equality-operator", "equality"),
+        SyntaxKind.NotEqualsExpression => ("!=", "==", OperatorRequirement.Any, "equality-operator", "equality"),
+        SyntaxKind.GreaterThanExpression => (">", ">=", OperatorRequirement.Any, "equality-operator", "equality"),
+        SyntaxKind.GreaterThanOrEqualExpression => (">=", ">", OperatorRequirement.Any, "equality-operator", "equality"),
+        SyntaxKind.LessThanExpression => ("<", "<=", OperatorRequirement.Any, "equality-operator", "equality"),
+        SyntaxKind.LessThanOrEqualExpression => ("<=", "<", OperatorRequirement.Any, "equality-operator", "equality"),
         _ => null
     };
 
@@ -671,15 +742,41 @@ internal sealed class MutationScanner : CSharpSyntaxWalker
         _ => null
     };
 
-    private static (string Original, string Replacement)? AssignmentOperatorFor(SyntaxKind kind) => kind switch
+    private static (string Original, string Replacement, OperatorRequirement Requirement)? AssignmentOperatorFor(SyntaxKind kind) => kind switch
     {
-        SyntaxKind.AddAssignmentExpression => ("+=", "-="),
-        SyntaxKind.SubtractAssignmentExpression => ("-=", "+="),
-        SyntaxKind.MultiplyAssignmentExpression => ("*=", "/="),
-        SyntaxKind.DivideAssignmentExpression => ("/=", "*="),
-        SyntaxKind.ModuloAssignmentExpression => ("%=", "*="),
+        SyntaxKind.AddAssignmentExpression => ("+=", "-=", OperatorRequirement.Numeric),
+        SyntaxKind.SubtractAssignmentExpression => ("-=", "+=", OperatorRequirement.Numeric),
+        SyntaxKind.MultiplyAssignmentExpression => ("*=", "/=", OperatorRequirement.Numeric),
+        SyntaxKind.DivideAssignmentExpression => ("/=", "*=", OperatorRequirement.Numeric),
+        SyntaxKind.ModuloAssignmentExpression => ("%=", "*=", OperatorRequirement.Numeric),
+        SyntaxKind.AndAssignmentExpression => ("&=", "|=", OperatorRequirement.Bitwise),
+        SyntaxKind.OrAssignmentExpression => ("|=", "&=", OperatorRequirement.Bitwise),
+        SyntaxKind.ExclusiveOrAssignmentExpression => ("^=", "&=", OperatorRequirement.Bitwise),
+        SyntaxKind.LeftShiftAssignmentExpression => ("<<=", ">>=", OperatorRequirement.Bitwise),
+        SyntaxKind.RightShiftAssignmentExpression => (">>=", "<<=", OperatorRequirement.Bitwise),
+        SyntaxKind.UnsignedRightShiftAssignmentExpression => (">>>=", "<<=", OperatorRequirement.Bitwise),
         _ => null
     };
+
+    private static TextSpan ObjectInitializerMemberRemovalSpan(
+        SeparatedSyntaxList<ExpressionSyntax> expressions,
+        int index)
+    {
+        ExpressionSyntax expression = expressions[index];
+        if (expressions.Count == 1)
+        {
+            return expression.Span;
+        }
+
+        if (index < expressions.Count - 1)
+        {
+            SyntaxToken nextSeparator = expressions.GetSeparator(index);
+            return TextSpan.FromBounds(expression.SpanStart, nextSeparator.FullSpan.End);
+        }
+
+        SyntaxToken previousSeparator = expressions.GetSeparator(index - 1);
+        return TextSpan.FromBounds(previousSeparator.FullSpan.Start, expression.Span.End);
+    }
 
     private static (string Original, string Replacement)? UpdateOperatorFor(SyntaxKind kind) => kind switch
     {
